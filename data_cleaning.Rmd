@@ -1,0 +1,40 @@
+---
+title: "P8106 Final Project - Data Cleaning"
+author: "Tucker Morgan - tlm2152"
+date: "3/10/2022"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(tidyverse)
+```
+
+First, let's pull in the Framingham Heart Disease dataset and take a look at the data structure and check for missing values.
+```{r importing data}
+heart_df <- read_csv(file = "framingham_heart_disease.csv")
+
+skimr::skim(heart_df)
+```
+
+Looks like we will want to recode some variables, and there are missing values to contend with. Since our response variable, `TenYearCHD`, is measured for each observation, we might consider a simple imputation technique for missing values to limit lost information.
+
+```{r data cleaning}
+heart_df_cl <- heart_df %>% 
+  # converting categorical variables to factors
+  mutate(male = factor(male),
+         education = factor(education, levels = c("1", "2", "3", "4"), ordered = TRUE),
+         currentSmoker = factor(currentSmoker),
+         BPMeds = factor(BPMeds),
+         prevalentStroke = factor(prevalentStroke),
+         prevalentHyp = factor(prevalentHyp),
+         diabetes = factor(diabetes),
+         TenYearCHD = factor(TenYearCHD))
+  # we could pipe to missing value imputation here
+
+skimr::skim(heart_df_cl)
+```
+
