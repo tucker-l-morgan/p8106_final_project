@@ -36,5 +36,10 @@ heart_df_cl <- heart_df %>%
   # we could pipe to missing value imputation here
 
 skimr::skim(heart_df_cl)
+
+heart_df_cl %>% 
+  #filter(TenYearCHD == 1) %>% 
+  remove_missing() %>% 
+  skimr::skim() # looks like only 87 of 644 Y = 1 observations have missing values
 ```
 
