@@ -1,45 +1,128 @@
 ---
 title: "P8106 Final Project - Data Cleaning"
-author: "Tucker Morgan - tlm2152"
-date: "3/10/2022"
+author: "Hun Lee, Tucker Morgan, Zachary Katz"
+date: "3/15/2022"
 output: github_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-```{r libraries}
+## Data dictionary
+
+Note that for binary variable, 1: yes & 0: No
+
+sex : the gender of the observations. The variable is a binary named “male” in the dataset.
+
+age : Age at the time of medical examination in years.
+
+education : A categorical variable of the participants education, with the levels: Some high school (1), high school/GED (2), some college/vocational school (3), college (4)
+
+currentSmoker: Current cigarette smoking at the time of examinations
+
+cigsPerDay: Number of cigarettes smoked each day
+
+BPmeds: Use of Anti-hypertensive medication at exam
+
+prevalentStroke: Prevalent Stroke (0 = free of disease)
+
+prevalentHyp: Prevalent Hypertensive. Subject was defined as hypertensive if treated
+
+diabetes: Diabetic according to criteria of first exam treated
+
+totChol: Total cholesterol (mg/dL)
+
+sysBP: Systolic Blood Pressure (mmHg)
+
+diaBP: Diastolic blood pressure (mmHg)
+
+BMI: Body Mass Index, weight (kg)/height (m)^2
+
+heartRate: Heart rate (beats/minute)
+
+glucose: Blood glucose level (mg/dL)
+
+And finally the response variable : + TenYearCHD : The 10 year risk of coronary heart disease(CHD).
+
+```{r, echo = FALSE}
+library(RCurl)
+library(skimr)
+library(caret)
 library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(RColorBrewer)
+library(kableExtra)
+library(dplyr)
+library(tidymodels)
+library(AppliedPredictiveModeling)
+library(ggpubr)
+library(patchwork)
 ```
 
-First, let's pull in the Framingham Heart Disease dataset and take a look at the data structure and check for missing values.
-```{r importing data}
-heart_df <- read_csv(file = "framingham_heart_disease.csv")
-
-skimr::skim(heart_df)
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%")
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis")
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
 ```
 
-Looks like we will want to recode some variables, and there are missing values to contend with. Since our response variable, `TenYearCHD`, is measured for each observation, we might consider a simple imputation technique for missing values to limit lost information.
+## Importing and partitioning data
 
-```{r data cleaning}
-heart_df_cl <- heart_df %>% 
-  # converting categorical variables to factors
+```{r}
+x <- getURL("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
+
+data <- read.csv(text = x) %>% janitor::clean_names()
+
+data <- distinct(data) # in case there are duplicated rows
+
+set.seed(1)
+split <- initial_split(data, prop = 0.8)
+
+training_df <- 
+  split %>% 
+  training() %>%
+  na.omit() %>%
   mutate(male = factor(male),
-         education = factor(education, levels = c("1", "2", "3", "4"), ordered = TRUE),
-         currentSmoker = factor(currentSmoker),
-         BPMeds = factor(BPMeds),
-         prevalentStroke = factor(prevalentStroke),
-         prevalentHyp = factor(prevalentHyp),
-         diabetes = factor(diabetes),
-         TenYearCHD = factor(TenYearCHD))
-  # we could pipe to missing value imputation here
+         education = factor(education),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes))  %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
+           fct_relevel("CHD", "NoCHD")) %>%
+  rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female"))
 
-skimr::skim(heart_df_cl)
+testing_df <- 
+  split %>% testing()  %>%
+  na.omit() %>%
+  mutate(male = factor(male),
+         education = factor(education),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes)) %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
+           fct_relevel("CHD", "NoCHD")) %>%
+  rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female"))
 
-heart_df_cl %>% 
-  #filter(TenYearCHD == 1) %>% 
-  remove_missing() %>% 
-  skimr::skim() # looks like only 87 of 644 Y = 1 observations have missing values
 ```
 
+## Data summary
+
+```{r}
+skim(training_df) 
+```
