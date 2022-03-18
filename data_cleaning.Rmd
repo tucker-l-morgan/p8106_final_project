@@ -1,5 +1,5 @@
 ---
-title: "P8106 Final Project - Data Cleaning"
+title: "P8106 Final Project: Data Cleaning"
 author: "Hun Lee, Tucker Morgan, Zachary Katz"
 date: "3/15/2022"
 output: github_document

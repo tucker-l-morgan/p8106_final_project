@@ -1,4 +1,4 @@
-P8106 Final Project - Data Cleaning
+P8106 Final Project: Data Cleaning
 ================
 Hun Lee, Tucker Morgan, Zachary Katz
 3/15/2022
@@ -53,47 +53,83 @@ data <- read.csv(text = x) %>% janitor::clean_names()
 
 data <- distinct(data) # in case there are duplicated rows
 
-set.seed(1)
-split <- initial_split(data, prop = 0.8)
-
-training_df <- 
-  split %>% 
-  training() %>%
-  na.omit() %>%
+heart_data = data %>% 
+  na.omit() %>% 
   mutate(male = factor(male),
-         education = factor(education),
          current_smoker = factor(current_smoker),
          bp_meds = factor(bp_meds),
          prevalent_stroke = factor(prevalent_stroke),
          prevalent_hyp = factor(prevalent_hyp),
          diabetes = factor(diabetes))  %>%
-  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
-           fct_relevel("CHD", "NoCHD")) %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD_present","CHD_absent") %>%
+           fct_relevel("CHD_present", "CHD_absent")) %>%
   rename(sex = male) %>%
   mutate(sex = ifelse(sex == "1", "male","female") %>%
-           fct_relevel("male", "female"))
-
-testing_df <- 
-  split %>% testing()  %>%
-  na.omit() %>%
-  mutate(male = factor(male),
-         education = factor(education),
-         current_smoker = factor(current_smoker),
-         bp_meds = factor(bp_meds),
-         prevalent_stroke = factor(prevalent_stroke),
-         prevalent_hyp = factor(prevalent_hyp),
-         diabetes = factor(diabetes)) %>%
-  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
-           fct_relevel("CHD", "NoCHD")) %>%
-  rename(sex = male) %>%
-  mutate(sex = ifelse(sex == "1", "male","female") %>%
-           fct_relevel("male", "female"))
+           fct_relevel("male", "female")) %>% 
+  mutate(
+    education = case_when(
+      education == "1" ~ "some_HS",
+      education == "2" ~ "HS_grad",
+      education == "3" ~ "some_college",
+      education == "4" ~ "college_grad"
+    ),
+    current_smoker = recode(
+      current_smoker,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    bp_meds = recode(
+      bp_meds,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_stroke = recode(
+      prevalent_stroke,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_hyp = recode(
+      prevalent_hyp,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    diabetes = recode(
+      diabetes,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    education = factor(education, levels = c("some_HS", "HS_grad", "some_college", "college_grad"))
+  )
 ```
 
 ## Data summary
 
 ``` r
-skim(training_df) 
+str(heart_data)
+```
+
+    ## 'data.frame':    3658 obs. of  16 variables:
+    ##  $ sex             : Factor w/ 2 levels "male","female": 1 2 1 2 2 2 2 2 1 1 ...
+    ##  $ age             : int  39 46 48 61 46 43 63 45 52 43 ...
+    ##  $ education       : Factor w/ 4 levels "some_HS","HS_grad",..: 4 2 1 3 3 2 1 2 1 1 ...
+    ##  $ current_smoker  : Factor w/ 2 levels "no","yes": 1 1 2 2 2 1 1 2 1 2 ...
+    ##  $ cigs_per_day    : int  0 0 20 30 23 0 0 20 0 30 ...
+    ##  $ bp_meds         : Factor w/ 2 levels "no","yes": 1 1 1 1 1 1 1 1 1 1 ...
+    ##  $ prevalent_stroke: Factor w/ 2 levels "no","yes": 1 1 1 1 1 1 1 1 1 1 ...
+    ##  $ prevalent_hyp   : Factor w/ 2 levels "no","yes": 1 1 1 2 1 2 1 1 2 2 ...
+    ##  $ diabetes        : Factor w/ 2 levels "no","yes": 1 1 1 1 1 1 1 1 1 1 ...
+    ##  $ tot_chol        : int  195 250 245 225 285 228 205 313 260 225 ...
+    ##  $ sys_bp          : num  106 121 128 150 130 ...
+    ##  $ dia_bp          : num  70 81 80 95 84 110 71 71 89 107 ...
+    ##  $ bmi             : num  27 28.7 25.3 28.6 23.1 ...
+    ##  $ heart_rate      : int  80 95 75 65 85 77 60 79 76 93 ...
+    ##  $ glucose         : int  77 76 70 103 85 99 85 78 79 88 ...
+    ##  $ ten_year_chd    : Factor w/ 2 levels "CHD_present",..: 2 2 2 1 2 2 1 2 2 2 ...
+    ##  - attr(*, "na.action")= 'omit' Named int [1:582] 15 22 27 34 37 43 50 55 71 73 ...
+    ##   ..- attr(*, "names")= chr [1:582] "15" "22" "27" "34" ...
+
+``` r
+skim(heart_data) 
 ```
 
 <table style="width: auto;" class="table table-condensed">
@@ -114,7 +150,7 @@ Data summary
 Name
 </td>
 <td style="text-align:left;">
-training\_df
+heart\_data
 </td>
 </tr>
 <tr>
@@ -122,7 +158,7 @@ training\_df
 Number of rows
 </td>
 <td style="text-align:left;">
-2928
+3658
 </td>
 </tr>
 <tr>
@@ -224,7 +260,7 @@ FALSE
 2
 </td>
 <td style="text-align:left;">
-fem: 1619, mal: 1309
+fem: 2035, mal: 1623
 </td>
 </tr>
 <tr>
@@ -244,7 +280,7 @@ FALSE
 4
 </td>
 <td style="text-align:left;">
-1: 1211, 2: 873, 3: 489, 4: 355
+som: 1526, HS\_: 1101, som: 608, col: 423
 </td>
 </tr>
 <tr>
@@ -264,7 +300,7 @@ FALSE
 2
 </td>
 <td style="text-align:left;">
-0: 1488, 1: 1440
+no: 1869, yes: 1789
 </td>
 </tr>
 <tr>
@@ -284,7 +320,7 @@ FALSE
 2
 </td>
 <td style="text-align:left;">
-0: 2839, 1: 89
+no: 3547, yes: 111
 </td>
 </tr>
 <tr>
@@ -304,7 +340,7 @@ FALSE
 2
 </td>
 <td style="text-align:left;">
-0: 2911, 1: 17
+no: 3637, yes: 21
 </td>
 </tr>
 <tr>
@@ -324,7 +360,7 @@ FALSE
 2
 </td>
 <td style="text-align:left;">
-0: 2014, 1: 914
+no: 2518, yes: 1140
 </td>
 </tr>
 <tr>
@@ -344,7 +380,7 @@ FALSE
 2
 </td>
 <td style="text-align:left;">
-0: 2852, 1: 76
+no: 3559, yes: 99
 </td>
 </tr>
 <tr>
@@ -364,7 +400,7 @@ FALSE
 2
 </td>
 <td style="text-align:left;">
-NoC: 2474, CHD: 454
+CHD: 3101, CHD: 557
 </td>
 </tr>
 </tbody>
@@ -422,13 +458,13 @@ age
 1
 </td>
 <td style="text-align:right;">
-49.52
+49.55
 </td>
 <td style="text-align:right;">
-8.54
+8.56
 </td>
 <td style="text-align:right;">
-33.00
+32.00
 </td>
 <td style="text-align:right;">
 42.00
@@ -443,7 +479,7 @@ age
 70.0
 </td>
 <td style="text-align:left;">
-▅▇▇▆▂
+▃▇▆▆▂
 </td>
 </tr>
 <tr>
@@ -457,10 +493,10 @@ cigs\_per\_day
 1
 </td>
 <td style="text-align:right;">
-8.97
+9.03
 </td>
 <td style="text-align:right;">
-11.70
+11.92
 </td>
 <td style="text-align:right;">
 0.00
@@ -475,7 +511,7 @@ cigs\_per\_day
 20.00
 </td>
 <td style="text-align:right;">
-60.0
+70.0
 </td>
 <td style="text-align:left;">
 ▇▃▁▁▁
@@ -492,19 +528,19 @@ tot\_chol
 1
 </td>
 <td style="text-align:right;">
-236.58
+236.85
 </td>
 <td style="text-align:right;">
-44.41
+44.10
 </td>
 <td style="text-align:right;">
 113.00
 </td>
 <td style="text-align:right;">
-205.00
+206.00
 </td>
 <td style="text-align:right;">
-233.00
+234.00
 </td>
 <td style="text-align:right;">
 263.00
@@ -527,10 +563,10 @@ sys\_bp
 1
 </td>
 <td style="text-align:right;">
-132.15
+132.37
 </td>
 <td style="text-align:right;">
-21.86
+22.09
 </td>
 <td style="text-align:right;">
 83.50
@@ -542,7 +578,7 @@ sys\_bp
 128.00
 </td>
 <td style="text-align:right;">
-143.00
+143.88
 </td>
 <td style="text-align:right;">
 295.0
@@ -562,22 +598,22 @@ dia\_bp
 1
 </td>
 <td style="text-align:right;">
-82.81
+82.92
 </td>
 <td style="text-align:right;">
-11.91
+11.97
 </td>
 <td style="text-align:right;">
 48.00
 </td>
 <td style="text-align:right;">
-74.50
+75.00
 </td>
 <td style="text-align:right;">
 82.00
 </td>
 <td style="text-align:right;">
-89.50
+90.00
 </td>
 <td style="text-align:right;">
 142.5
@@ -600,7 +636,7 @@ bmi
 25.78
 </td>
 <td style="text-align:right;">
-4.06
+4.07
 </td>
 <td style="text-align:right;">
 15.54
@@ -609,10 +645,10 @@ bmi
 23.08
 </td>
 <td style="text-align:right;">
-25.36
+25.38
 </td>
 <td style="text-align:right;">
-27.99
+28.04
 </td>
 <td style="text-align:right;">
 56.8
@@ -632,10 +668,10 @@ heart\_rate
 1
 </td>
 <td style="text-align:right;">
-75.74
+75.73
 </td>
 <td style="text-align:right;">
-12.02
+11.98
 </td>
 <td style="text-align:right;">
 44.00
@@ -667,16 +703,16 @@ glucose
 1
 </td>
 <td style="text-align:right;">
-82.03
+81.85
 </td>
 <td style="text-align:right;">
-23.44
+23.90
 </td>
 <td style="text-align:right;">
 40.00
 </td>
 <td style="text-align:right;">
-72.00
+71.00
 </td>
 <td style="text-align:right;">
 78.00
