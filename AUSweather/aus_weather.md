@@ -9,7 +9,7 @@ be to predict `RainTomorrow`, with each day being its own observation.
 ``` r
 library(tidyverse)
 
-weather_aus <- read_csv("./weatherAUS.csv")
+weather_aus <- read_csv("./AUSweather/weatherAUS.csv")
 skimr::skim(weather_aus)
 ```
 
@@ -149,7 +149,37 @@ But we do retain 3,416 unique dates, which is very close to the same
 number of unique dates in the full dataset. We lose almost half of our
 locations, indicating some problematic geographies. We would want to
 remove `Location`, and we would need to code `WindGustDir` and its kin
-somehow. Not sure if factorization would be the best route or not. Also
-`RainToday` and `RainTomorrow` are coded binary as 2 vs 3… WHY??
+somehow. Not sure if factorization would be the best route or not.
 
-Still pretty interesting!
+What’s the breakout of “Yes” vs “No” for our outcome?
+
+``` r
+comp_data %>% 
+  filter(RainTomorrow == "Yes") %>% 
+  nrow() 
+```
+
+    ## [1] 12427
+
+``` r
+comp_data %>% 
+  filter(RainTomorrow == "Yes") %>% 
+  nrow()/ nrow(comp_data)
+```
+
+    ## [1] 0.2202588
+
+Hmm… 22% positivity is pretty good! Might be usable. I’m really not sure
+if it matters that we exclude most days. We seem to have a large number
+of days with full data and a seemingly reasonable frequency.
+
+``` r
+weather_aus %>% 
+  filter(RainTomorrow == "Yes") %>% 
+  nrow()/ nrow(weather_aus)
+```
+
+    ## [1] 0.2191462
+
+Very similar percentages!! So missing data may not be related to whether
+it rains or not…
