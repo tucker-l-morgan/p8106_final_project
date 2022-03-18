@@ -83,13 +83,8 @@ data <- read.csv(text = x) %>% janitor::clean_names()
 
 data <- distinct(data) # in case there are duplicated rows
 
-set.seed(1)
-split <- initial_split(data, prop = 0.8)
-
-training_df <- 
-  split %>% 
-  training() %>%
-  na.omit() %>%
+heart_data = data %>% 
+  na.omit() %>% 
   mutate(male = factor(male),
          education = factor(education),
          current_smoker = factor(current_smoker),
@@ -102,27 +97,10 @@ training_df <-
   rename(sex = male) %>%
   mutate(sex = ifelse(sex == "1", "male","female") %>%
            fct_relevel("male", "female"))
-
-testing_df <- 
-  split %>% testing()  %>%
-  na.omit() %>%
-  mutate(male = factor(male),
-         education = factor(education),
-         current_smoker = factor(current_smoker),
-         bp_meds = factor(bp_meds),
-         prevalent_stroke = factor(prevalent_stroke),
-         prevalent_hyp = factor(prevalent_hyp),
-         diabetes = factor(diabetes)) %>%
-  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
-           fct_relevel("CHD", "NoCHD")) %>%
-  rename(sex = male) %>%
-  mutate(sex = ifelse(sex == "1", "male","female") %>%
-           fct_relevel("male", "female"))
-
 ```
 
 ## Data summary
 
 ```{r}
-skim(training_df) 
+skim(heart_data) 
 ```
