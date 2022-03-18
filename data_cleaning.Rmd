@@ -86,21 +86,56 @@ data <- distinct(data) # in case there are duplicated rows
 heart_data = data %>% 
   na.omit() %>% 
   mutate(male = factor(male),
-         education = factor(education),
          current_smoker = factor(current_smoker),
          bp_meds = factor(bp_meds),
          prevalent_stroke = factor(prevalent_stroke),
          prevalent_hyp = factor(prevalent_hyp),
          diabetes = factor(diabetes))  %>%
-  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
-           fct_relevel("CHD", "NoCHD")) %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD_present","CHD_absent") %>%
+           fct_relevel("CHD_present", "CHD_absent")) %>%
   rename(sex = male) %>%
   mutate(sex = ifelse(sex == "1", "male","female") %>%
-           fct_relevel("male", "female"))
+           fct_relevel("male", "female")) %>% 
+  mutate(
+    education = case_when(
+      education == "1" ~ "some_HS",
+      education == "2" ~ "HS_grad",
+      education == "3" ~ "some_college",
+      education == "4" ~ "college_grad"
+    ),
+    current_smoker = recode(
+      current_smoker,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    bp_meds = recode(
+      bp_meds,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_stroke = recode(
+      prevalent_stroke,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_hyp = recode(
+      prevalent_hyp,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    diabetes = recode(
+      diabetes,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    education = factor(education, levels = c("some_HS", "HS_grad", "some_college", "college_grad"))
+  )
 ```
 
 ## Data summary
 
 ```{r}
+str(heart_data)
+
 skim(heart_data) 
 ```
