@@ -1,0 +1,1191 @@
+---
+title: 'P8106, Data Science II: Midterm Project'
+author: 'Zachary Katz (UNI: zak2132)'
+date: "3/28/2022"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+    toc_depth: 3
+  fontsize: 10pt
+  geometry: margin=0.5in
+  header-includes:
+    -\usepackage{fancyhdr}
+    -\usepackage{lipsum}
+    -\pagestyle{fancy}
+    -\fancyhead[R]{\thepage}
+    -\fancypagestyle{plain}{\pagestyle{fancy}}
+---
+
+```{r, include = FALSE, echo = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(skimr)
+library(RCurl)
+library(visdat)
+library(reshape2)
+library(DataExplorer)
+library(ggcorrplot)
+library(caret)
+library(vip)
+library(mgcv)
+library(klaR)
+library(pROC)
+library(ggridges)
+library(corrplot)
+library(AppliedPredictiveModeling)
+library(patchwork)
+library(Hmisc)
+library(groupdata2)
+library(reshape)
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  cache = TRUE,
+  fig.height = 6,
+  fig.width = 8
+  )
+
+theme_set(theme_minimal() + theme(
+  legend.position = "bottom",
+  plot.title = element_text(hjust = 0.5)
+))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis",
+  digits = 3)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+
+```
+
+## Introduction
+
+Heart disease accounts for roughly 695,000 fatalities annually in the United States alone, with known risk factors that include high cholesterol, smoking, and blood pressure. In this project, we aim to utilize observations from the Framingham cohort study to predict whether a particular study subject will or will not develop coronary heart disease in the next decade. Our data subset of longitudinal observations come from Kaggle; its cleaning generally entailed converting appropriate variables to factors (and re-leveling where needed), renaming and recoding binary 1/0 variables with more descriptive "yes" and "no" for ease of interpretation, and excluding observations with missing data on any measure. Prior to such exclusions, the full set of data contained 4,240 total observations across 16 variables, which are:
+
+$\text{\underline{7 categorical predictors}}$: `sex` (self-reported subject sex that takes values "male" or "female"); `education` (study participant's education that takes ordinal, mutually exclusive values "some_HS" (some high school completed), "HS_grad" (completed high school but did not attend college), "some_college" (attended college but did not graduate), and "college_grad" (graduated university)); `current_smoker` (binary "yes" or "no" indicating whether the participant was a smoker at the time of physical examination); `bp_meds` (binary "yes" or "no" indicating whether the participant was using anti-hypertensive medications at the time of physical examination); `prevalent_stroke` (binary "yes" or "no" indicating whether the participant had experienced stroke by the time of physical examination); `prevalent_hyp` (binary "yes" or "no" indicating whether the participant was being treated for active hypertension at the time of physical examination); and `diabetes` (binary "yes" or "no" indicating whether the participant was diagnosed as diabetic according to pre-specified criteria at the time of physical examination).
+
+$\text{\underline{8 continuous numeric predictors}}$: `age` (age in years at the time of medical examination); `cigs_per_day` (average number of cigarettes smoked each day at the time of medical examination, notably not conditioned on smoking status (i.e. for those with `current_smoker` status as "no", should take the value 0)); `tot_chol` (total blood cholesterol in mg/dL at the time of physical examination); `sys_BP` (systolic blood pressure in mm Hg at the time of physical examination); `dia_BP` (diastolic blood pressure in mm Hg at the time of physical examination); `bmi` (body mass index in $kg/m^2$ in mm Hg at the time of physical examination); `heart_rate` (resting heart rate in beats per minute at the time of physical examination); and `glucose` (blood glucose level in mg/dL at the time of physical examination). 
+
+Finally, beyond our 15 covariates lies our outcome (response) variable `ten_year_chd`, which is a binary indicator for the presence or absence of coronary heart disease (CHD) at 10 years of follow-up.
+
+```{r, include = FALSE}
+# Data URL
+URL = getURL("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
+
+# Read in all data, including missing
+all_df = read.csv(text = URL) %>% 
+  janitor::clean_names() %>% 
+  as.data.frame()
+
+# Distinct rows only and eliminates rows with missing data
+nonmissing_df = all_df %>% 
+  distinct() %>% 
+  na.omit()
+
+# Factor labels for categorical variables and other recoding
+cleaned_df = nonmissing_df %>% 
+  mutate(male = factor(male),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes))  %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD_present","CHD_absent") %>%
+           fct_relevel("CHD_present", "CHD_absent")) %>%
+  rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female")) %>% 
+  mutate(
+    education = case_when(
+      education == "1" ~ "some_HS",
+      education == "2" ~ "HS_grad",
+      education == "3" ~ "some_college",
+      education == "4" ~ "college_grad"
+    ),
+    current_smoker = recode(
+      current_smoker,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    bp_meds = recode(
+      bp_meds,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_stroke = recode(
+      prevalent_stroke,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_hyp = recode(
+      prevalent_hyp,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    diabetes = recode(
+      diabetes,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    education = factor(education, levels = c("some_HS", "HS_grad", "some_college", "college_grad"))
+  )
+```
+
+```{r, include = FALSE}
+
+# Number of rows with any missing data
+rows_missing_data = sum(!complete.cases(all_df))
+
+# Missing data pattern
+missing_data_viz = all_df %>% 
+  vis_miss()
+```
+
+582 rows (13.7% of our observations) lacked at least one data point, with `glucose` accounting for the plurality of missing data (9.15% missing rate). We excluded observations with one or more missing data points from our study, but plan to include and impute missing data in a future iteration of our work. In total, this leaves 3,658 observations, of which 3,101 (84.8%) have CHD absent at 10 years, whereas 557 (15.2%) have CHD present -- a notable class imbalance.
+
+```{r, include = FALSE}
+# Structure and numerical summaries of the non-missing data
+# df_structure = str(cleaned_df)
+
+df_summary = summary(cleaned_df)
+
+skim_without_charts(cleaned_df)
+```
+
+## Exploratory Analysis & Visualization
+
+```{r, include = FALSE}
+# Distributions of predictors without factoring by outcome
+
+# Categorical predictors
+plot_bar(cleaned_df)
+
+# Continuous predictors
+plot_density(cleaned_df)
+```
+
+```{r, include = FALSE}
+# Distributions of continuous variables factored by outcome
+continuous_vars_df = cleaned_df %>% 
+  dplyr::select(age, cigs_per_day, tot_chol, sys_bp, dia_bp, bmi, heart_rate, glucose, ten_year_chd)
+
+continuous_explore = continuous_vars_df %>% 
+  melt(id.vars= "ten_year_chd") %>% 
+  ggplot(aes(x = value, y = ten_year_chd)) + 
+  stat_density_ridges(aes(color = ten_year_chd, fill = ten_year_chd), alpha = 0.2, quantile_lines = TRUE, quantiles = 2, jittered_points = TRUE) + 
+  facet_wrap(~variable, scales = "free", nrow = 2) + 
+  labs(x = "",
+        y = "Density",
+       fill = "10 Year CHD Status",
+       color = "10 Year CHD Status") +
+  theme(legend.position = "none")
+  
+```
+
+```{r, include = FALSE}
+# Distributions of categorical variables factored by outcome
+categorical_vars_df = cleaned_df %>% 
+  dplyr::select(-age, -cigs_per_day, -tot_chol, -sys_bp, -dia_bp, -bmi, -heart_rate, -glucose)
+
+categorical_explore = categorical_vars_df %>% 
+  melt(id.vars = "ten_year_chd") %>% 
+  ggplot(aes(x = value, fill = ten_year_chd)) + 
+  geom_bar(position = "fill") + 
+  facet_wrap(~variable, scales = "free", nrow = 2) + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = "",
+        y = "Proportion by CHD Status",
+       fill = "10 Year CHD Status",
+       color = "10 Year CHD Status")
+```
+
+```{r, echo = FALSE}
+continuous_explore / categorical_explore + plot_annotation(
+  title = "Fig.1: Distributions of Predictors By Outcome Class"
+)
+```
+
+When we stratify the distributions of our continuous predictors by outcome status, we find the most substantial differences in median `age` and `sys_bp` for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for `prevalent_stroke`, `diabetes`, and `bp_meds`.
+
+```{r, include = FALSE}
+
+# Correlation plot for continuous predictors
+continuous_vars_matrix = model.matrix(ten_year_chd ~ ., data = continuous_vars_df)[, -1]
+  
+continuous_vars_corrs = corrplot(cor(continuous_vars_matrix), method = "circle", type = "full")
+
+# Correlation plot for categorical predictors
+categorical_vars_matrix = model.matrix(ten_year_chd ~ ., data = categorical_vars_df)[, -1]
+
+categorical_vars_corrs = corrplot(cor(categorical_vars_matrix), method = "circle", type = "full")
+
+# Correlation plot for all predictors
+all_preds_matrix = model.matrix(ten_year_chd ~ ., data = cleaned_df)[, -1]
+
+all_vars_corrs = corrplot(cor(all_preds_matrix), method = "circle", type = "full")
+
+# Alternative using ggcorrplot for all vars
+ggplot_corr_alt = model.matrix(~0 + ., data = cleaned_df) %>%
+  cor(use = "pairwise.complete.obs") %>% 
+  ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 2)
+
+# Function to flatten matrix, with credit to http://www.sthda.com/english/wiki/correlation-matrix
+flat_matrix = function(corrmat, pmat){
+  
+  upper_triangle = upper.tri(corrmat)
+  
+  data.frame(
+    First_var = rownames(corrmat)[row(corrmat)[upper_triangle]],
+    Second_var = rownames(corrmat)[col(corrmat)[upper_triangle]],
+    Correlation = (corrmat)[upper_triangle],
+    P_Value = pmat[upper_triangle]
+    )
+}
+
+all_preds_matrix = model.matrix(ten_year_chd ~ ., data = cleaned_df)[, -1]
+
+corr_mat_preds = rcorr(all_preds_matrix)
+
+# Most correlated predictors
+corr_table_preds = flat_matrix(corr_mat_preds$r, corr_mat_preds$P) %>% 
+  as.data.frame() %>% 
+  arrange(desc(abs(Correlation))) %>% 
+  dplyr::select(-P_Value) %>% 
+  head()
+
+# Correlations with outcome
+all_vars_matrix = model.matrix( ~ ., data = cleaned_df)
+corr_all = rcorr(all_vars_matrix)
+corr_table_outcome = flat_matrix(corr_all$r, corr_all$P) %>% 
+  as.data.frame() %>% 
+  filter(Second_var == "ten_year_chdCHD_absent") %>% 
+  arrange(desc(abs(Correlation))) %>% 
+  dplyr::select(-P_Value) %>% 
+  head()
+
+knitr::kable(corr_table_preds, col.names = c("First Variable", "Second Variable", "Correlation")) %>% 
+  kableExtra::kable_styling(full_width = FALSE)
+
+knitr::kable(corr_table_outcome, col.names = c("First Variable", "Second Variable", "Correlation")) %>% 
+  kableExtra::kable_styling(full_width = FALSE)
+
+# Correlation heatmap
+col = colorRampPalette(c("blue", "white", "red"))(20)
+cor = cor(all_preds_matrix)
+heatmap = heatmap(x = cor, col = col, symm = TRUE)
+
+cor_df = melt(cor)
+heatmap_ggplot = ggplot(data = cor_df, aes(x = X1, y = X2, fill = value)) + 
+  geom_tile() + 
+  labs(
+    title = "Fig.2: Heatmap of Correlations Between Predictors",
+    x = "Predictor 1",
+    y = "Predictor 2",
+    fill = "Correlation"
+  ) + theme(axis.text.x = element_text(angle = 70, vjust = 1, hjust=1)) + 
+  theme(legend.position = "right")
+```
+
+```{r, echo = FALSE, fig.height = 5}
+heatmap_ggplot
+```
+
+We find no major multicollinearities, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
+
+```{r, eval = FALSE, include = FALSE}
+# Feature plot
+theme1 = transparentTheme(trans = 0.4)
+trellis.par.set(theme1)
+
+# All predictors
+featurePlot(x = all_preds_matrix,
+            y = cleaned_df$ten_year_chd,
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            plot = "density", pch = "|",
+            auto.key = list(columns = 2))
+
+# Continuous predictors (density)
+featurePlot(x = continuous_vars_matrix,
+            y = cleaned_df$ten_year_chd,
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            plot = "density", pch = "|",
+            auto.key = list(columns = 2))
+
+# Continuous predictors (box)
+featurePlot(x = continuous_vars_matrix,
+            y = cleaned_df$ten_year_chd,
+            scales = list(y = list(relation = "free"),
+                          x = list(rot = 90)),
+            plot = "box", 
+            auto.key = list(columns = 2))
+```
+
+## Classification Modeling
+
+### Modeling Overview
+
+Initially, we attempted classification without rectifying class imbalance after splitting the data into 80% training set and 20% test set. Given lack of major collinearity and relatively low missingness, all available predictors were included in each model unless a specific model selected them out during the training process. In total, seven kinds of models were used, with a pre-processing step (centering, scaling, and Box-Cox transformations) included in each iteration of model training under 10-fold cross-validation, repeated five times. Seeds were set in each instance to ensure reproducibility of the data, given the many assumptions and tuning parameters in our variety of models. All tuning parameters were selected using cross-validation in model training to find the optimal model that maximized AUC. Our models were:
+
+* **Penalized logistic regression** (elastic net, binomial family, logit link), with objective function that includes loss and penalty given our high number of predictors, and tuning on $\alpha$ (mixing proportion) and $\lambda$ (total penalization) for our final model
+
+* **Generalized additive model (GAM)** (also binomial family, logit link), with potential inclusion of flexible nonlinearities for some predictors, performed in both `mgcv` for more flexibility and in `caret` for model comparison, and using general cross-validation to determine the smoothness of each operator $\hat{f_j}$ and to search over `GCV.Cp` given  unknown scale parameter
+
+* **Multivariate adaptive regression splines (MARS)** using `earth`, with tuning parameters (1) degree of features (number of possible hinge functions per parameter) and (2) number of terms (may not equal the number of predictors given the possibility of multiple hinge functions), including a stepwise model building procedure involving the addition of piecewise linear models / spline bases, followed by a pruning procedure
+
+* **K-Nearest Neighbors (KNN)** to predict class labels through majority vote among k neighbors, which is tuned using cross-validation, given known utility for class imbalance -- but considered a "black box" model without clear relation between predictor and response
+
+* **Linear discriminant analysis (LDA)**, which has no tuning parameters and assumes normally distributed features to classify by nearest centroid following data sphering and projection onto smaller subspaces, tends to work reasonably well with small n or well-separated classes, which doesn't appear true in our case and may make the model less robust
+
+* **Quadratic discriminant analysis (QDA)**, like LDA, has no tuning parameters but permits flexible (quadratic) decision boundaries between classes, despite working better with well-separated response classes as well 
+
+* **Naive Bayes (NB)**, unlike LDA and QDA, assumes conditional independence of features in each class, which is generally more applicable for datasets with many qualitative and quantitative predictors; we include a Laplace correction given the possibility of test data points with feature values never before seen by the classifier, tuning our flexibility in the nonparametric case through class-validation on adjustments to kernel density bandwidths
+
+### Initial Modeling Results
+
+```{r, include = FALSE}
+set.seed(2132)
+
+# Training/testing partition
+index_train = createDataPartition(cleaned_df$ten_year_chd, 
+                                  p = 0.8,
+                                  list = FALSE)
+
+training_df = cleaned_df[index_train, ]
+testing_df = cleaned_df[-index_train, ]
+
+# Model matrices
+x_train = model.matrix(ten_year_chd ~ . , training_df)[, -1]
+x_test = model.matrix(ten_year_chd ~ ., testing_df)[, -1]
+y_train = training_df$ten_year_chd
+y_test = testing_df$ten_year_chd
+
+# Train control with 10-fold cross-validation repeated 5 times
+ctrl = trainControl(method = "repeatedcv",
+                    repeats = 5,
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE)
+```
+
+```{r, include = FALSE}
+set.seed(2132)
+
+# Simple logistic regression (no penalization)
+glm_fit = glm(ten_year_chd ~ .,
+              data = cleaned_df,
+              subset = index_train,
+              family = binomial(link = "logit"))
+
+# Check performance on training data with simple classifier (p = 0.5)
+logit_train_predictions = predict(glm_fit, 
+                         newdata = cleaned_df[index_train, ], 
+                         type = "response")
+
+train_pred = rep("CHD_absent", length(logit_train_predictions))
+
+train_pred[logit_train_predictions < 0.50] = "CHD_present"
+
+confusionMatrix(data = as.factor(train_pred),
+                reference = y_train,
+                positive = "CHD_absent")
+
+# Check performance on testing data with simple classifier (p = 0.5)
+logit_test_predictions = predict(glm_fit, 
+                         newdata = cleaned_df[-index_train, ], 
+                         type = "response")
+
+test_pred = rep("CHD_absent", length(logit_test_predictions))
+
+test_pred[logit_test_predictions < 0.50] = "CHD_present"
+
+confusionMatrix(data = as.factor(test_pred),
+                reference = y_test,
+                positive = "CHD_absent")
+```
+
+```{r, include = FALSE}
+# Penalized logistic regression
+
+set.seed(2132)
+
+glm_grid = expand.grid(alpha = seq(0, 1, length = 11),
+                       lambda = exp(seq(-8, -3, length = 19)))
+
+logit_glm = train(x = x_train,
+                  y = y_train,
+                  method = "glmnet",
+                  tuneGrid = glm_grid,
+                  metric = "ROC",
+                  trControl = ctrl,
+                  family = "binomial",
+                  preProcess = c("center", "scale", "BoxCox"))
+
+# Tells us 7 variables were transformed
+logit_glm
+
+# Check which variables are transformed
+logit_glm$preProcess$bc
+
+# Optimal tuning parameters
+logit_glm$bestTune
+
+# Plots of optimal tuning parameters
+myCol = rainbow(15)
+myPar = list(superpose.symbol = list(col = myCol),
+             superpose.line = list(col = myCol))
+
+plot(logit_glm, par.settings = myPar, xTrans = function(x) log(x))
+
+logit_tuning_graph = ggplot(logit_glm, highlight = T) + 
+  scale_x_continuous(trans = "log") + 
+  labs(title = "Penalized Logistic Regression",
+       x = "Lambda",
+       y = "AUC")
+
+# Variable importance
+logit_vip_graph = vip(logit_glm, num_features = 20, method = "model")
+```
+
+```{r, include = FALSE}
+# GAM model
+
+set.seed(2132)
+
+# Some predictors take on < 10 values, so may have loss of flexibility using `caret`
+sapply(x_train %>% as.data.frame(), n_distinct)
+
+# Try caret, but might have some loss of flexibility compared to MCGV
+GAM_grid = data.frame(method = "GCV.Cp",
+                      select = c(TRUE, FALSE))
+
+GAM_model = train(x = x_train,
+                  y = y_train,
+                  method = "gam",
+                  metric = "ROC",
+                  family = "binomial",
+                  trControl = ctrl,
+                  tuneGrid = GAM_grid,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+# Parameters that fit the best model
+GAM_model$bestTune
+
+# Check and plot final model
+GAM_model$finalModel
+
+par(mar = c(1, 1, 1, 1))
+par(mfrow = c(4, 4))
+plot(GAM_model$finalModel, residuals = TRUE, all.terms = FALSE, shade = TRUE, shade.col = 2)
+
+# Summary of final model
+summary(GAM_model)
+
+# Summary of tuning parameter selection
+ggplot(GAM_model, highlight = TRUE)
+```
+
+```{r, include = FALSE}
+set.seed(2132)
+
+# Manually try MGCV based on learnings from caret best fit model
+MCGV_GAM_model = gam(ten_year_chd ~ sex + education + current_smoker + prevalent_hyp + s(cigs_per_day) + s(age) + s(heart_rate) + s(glucose) + s(dia_bp) + s(sys_bp) + s(tot_chol) + s(bmi),
+                     family = "binomial",
+                     method = "GCV.Cp",
+                     data = training_df)
+
+summary(MCGV_GAM_model)
+
+plot(MCGV_GAM_model, residuals = TRUE, all.terms = TRUE, shade = TRUE, shade.col = 2)
+```
+
+```{r, include = FALSE}
+# MARS model
+
+set.seed(2132)
+
+# Grid of tuning parameters
+MARS_grid = expand.grid(degree = 1:3,
+                        nprune = 2:25)
+
+MARS_model = train(x = x_train,
+                  y = y_train,
+                  method = "earth",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  tuneGrid = MARS_grid,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+# MARS model summary
+summary(MARS_model)
+
+# Graph of tuning parameter selection
+MARS_tuning_graph = ggplot(MARS_model, highlight = TRUE) + 
+  labs(title = "MARS Model",
+       x = "Pruning Terms",
+       y = "AUC")
+
+# MARS model coefficients
+coef(MARS_model$finalModel)
+
+# Variable importance graph
+MARS_VIP_graph = vip(MARS_model$finalModel)
+```
+
+```{r, include = FALSE}
+# KNN model
+
+set.seed(2132)
+
+KNN_model = train(x = x_train,
+                  y = y_train,
+                  method = "knn",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  tuneGrid = data.frame(k = seq(1, 300, by = 5)),
+                  preProcess = c("center", "scale", "BoxCox"))
+
+# KNN tuning parameters for optimal model
+KNN_tuning_graph = ggplot(KNN_model, highlight = TRUE) + 
+  labs(title = "KNN Model",
+       x = "# of Neighbors",
+       y = "AUC")
+
+KNN_model$bestTune
+```
+
+```{r, include = FALSE}
+# LDA
+
+set.seed(2132)
+
+LDA_model = lda(ten_year_chd ~ ., data = training_df, subset = index_train)
+
+# Plot linear discriminants
+plot(LDA_model, col = as.numeric(training_df$ten_year_chd), abbrev = TRUE)
+
+# Obtain scaling matrix
+LDA_model$scaling
+
+# Alternatively, use caret for LDA
+LDA_model_caret = train(x = x_train,
+                  y = y_train,
+                  method = "lda",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+# Examine results
+LDA_model_caret$results
+```
+
+```{r, include = FALSE}
+# QDA
+
+set.seed(2132)
+
+QDA_model = qda(ten_year_chd ~ ., data = training_df, subset = index_train)
+
+# Obtain scaling matrix
+QDA_model$scaling
+
+# Alternatively, try caret
+QDA_model_caret = train(x = x_train,
+                  y = y_train,
+                  method = "qda",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+# Examine results
+QDA_model_caret$results
+```
+
+```{r, include = FALSE}
+# Naive Bayes
+
+set.seed(2132)
+
+nb_grid = expand.grid(usekernel = c(FALSE, TRUE),
+                      fL = 1,
+                      adjust = seq(0.2, 4, by = 0.4))
+
+NB_model = train(x = x_train,
+                  y = y_train,
+                  method = "nb",
+                  tuneGrid = nb_grid,
+                  metric = "ROC",
+                  trControl = ctrl,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+NB_tuning_graph = ggplot(NB_model, highlight = TRUE) + 
+  labs(title = "Naive Bayes Model",
+       x = "Kernel Density Bandwidth",
+       y = "AUC") 
+```
+
+```{r, echo = FALSE, fig.height = 5.75}
+# Tuning parameter graphs for report
+(logit_tuning_graph + MARS_tuning_graph) / (KNN_tuning_graph + NB_tuning_graph) + plot_annotation(
+  title = "Fig.3: Tuning Parameter Selection"
+)
+```
+
+
+```{r, include = FALSE}
+# Variable importance graphs for report
+logit_vip_graph + MARS_VIP_graph
+```
+
+Our tuning parameters were selected by generalized cross-validation using only training data to maximize AUC. Our optimal elastic net model had $\alpha = 0.1$ (ratio between L1 and L2 penalty, which in our case is closer to ridge) and $\lambda = 0.0216$ (penalty strength parameter). For the MARS model, we select 1 product degree and 8 terms. In the KNN case, we choose to conduct majority voting with k = 256 neighbors, and for the NB nonparametric classifier with Laplace correction, we choose fL = 2, a higher kernel density bandwidth to promote flexibility. In addition, multiple models (e.g. elastic net and MARS) indicate that `age`, `sys_bp`, and `sex` are our three most important predictors for classifying response. Again, this is unsurprising given our exploratory data analysis and relatively better class separability for these features than for others. `cigs_per_day` also appears important to both models, whereas `glucose` seems more important to the MARS model than to the elastic net model. 
+
+```{r, include = FALSE}
+# Compare model performance on training data
+res = resamples(list(GLMNET = logit_glm,
+                     GAM = GAM_model,
+                     MARS = MARS_model,
+                     KNN = KNN_model,
+                     LDA = LDA_model_caret,
+                     QDA = QDA_model_caret,
+                     NB = NB_model))
+
+summary(res)
+
+resampling_plot = bwplot(res, layout = c(3, 1))
+
+train_roc_graph = ggplot(res, metric = "ROC") + 
+  labs(
+    x = "Model",
+    y = "AUC",
+    title = "Training Performance"
+  )
+train_sens_graph = ggplot(res, metric = "Sens") + 
+  labs(
+    y = "Sensitivity",
+    title = "Training Performance"
+  )
+train_spec_graph = ggplot(res, metric = "Spec")  + 
+  labs(
+    y = "Specificity",
+    title = "Training Performance"
+  )
+```
+
+```{r, include = FALSE}
+# Create function to produce precision, recall, and F-score for optimal training models
+metrics = function(model){
+  
+  prediction = predict(model, newdata = x_train, type = "raw")
+  x = confusionMatrix(data = as.factor(prediction),
+                  reference = y_train,
+                  positive = "CHD_present")
+  
+  TP = x$table[1, 1]
+  TN = x$table[2, 2]
+  FP = x$table[1, 2]
+  FN = x$table[2, 1]
+  
+  Precision = (TP / (TP + FP))
+  Recall = (TP / (TP + FN))
+  F_Score = (2 * Precision * Recall / (Precision + Recall))
+  
+  print(paste0("Precision % (training data): ", round(Precision * 100, 1)))
+  print(paste0("Recall % (training data): ", round(Recall * 100, 1)))
+  print(paste0("F-Score % (training data): ", round(F_Score * 100, 1)))
+  
+}
+
+metrics(logit_glm)
+metrics(GAM_model)
+metrics(MARS_model)
+metrics(KNN_model)
+metrics(LDA_model_caret)
+metrics(QDA_model_caret)
+metrics(NB_model)
+
+precision = c(85, 65.9, 62.3, 0, 47.7, 39.3, 75)
+recall = c(3.8, 6.5, 10.8, 0, 7, 18.6, 0.7)
+f_score = c(7.3, 11.8, 18.4, 0, 12.1, 25.3, 1.3)
+
+model_names = c("GLMNet",
+                "GAM",
+                "MARS",
+                "KNN",
+                "LDA",
+                "QDA",
+                "NB")
+
+training_metrics = cbind(model_names, precision, recall, f_score) %>% 
+  as.data.frame() %>% 
+  mutate(
+    precision = as.numeric(precision),
+    recall = as.numeric(recall),
+    f_score = as.numeric(f_score)
+  )
+
+metrics_training_plot = training_metrics %>% 
+  ggplot(aes(x = precision, y = recall)) + 
+  geom_point(aes(size = f_score, color = model_names)) + 
+  xlim(0, 100) + 
+  ylim(0, 100) + 
+  labs(
+    x = "Precision",
+    y = "Recall",
+    size = "F Score",
+    color = "Model Type",
+    title = "Precision vs. Recall",
+    subtitle = "Training Data Performance",
+    caption = "NaN values marked as 0 for graphical purposes"
+  ) + 
+  theme(legend.position = "left")
+```
+
+```{r, include = FALSE}
+# Check performance on test data (ROC curves)
+logit_glm_predict = predict(logit_glm, newdata = x_test, type = "prob")[, 1]
+GAM_predict = predict(GAM_model, newdata = x_test, type = "prob")[, 1]
+MARS_predict = predict(MARS_model, newdata = x_test, type = "prob")[, 1]
+KNN_predict = predict(KNN_model, newdata = x_test, type = "prob")[, 1]
+LDA_predict = predict(LDA_model_caret, newdata = x_test, type = "prob")[, 1]
+QDA_predict = predict(QDA_model_caret, newdata = x_test, type = "prob")[, 1]
+NB_predict = predict(NB_model, newdata = x_test, type = "prob")[, 1]
+
+roc_glm = roc(y_test, logit_glm_predict)
+roc_GAM = roc(y_test, GAM_predict)
+roc_MARS = roc(y_test, MARS_predict)
+roc_KNN = roc(y_test, KNN_predict)
+roc_LDA = roc(y_test, LDA_predict)
+roc_QDA = roc(y_test, QDA_predict)
+roc_NB = roc(y_test, NB_predict)
+
+auc = c(roc_glm$auc[1], 
+        roc_GAM$auc[1],
+        roc_MARS$auc[1],
+        roc_KNN$auc[1],
+        roc_LDA$auc[1],
+        roc_QDA$auc[1],
+        roc_NB$auc[1])
+
+model_names = c("GLMNet",
+                "GAM",
+                "MARS",
+                "KNN",
+                "LDA",
+                "QDA",
+                "NB")
+
+ROC_plot_test_data = ggroc(list(roc_glm,
+           roc_GAM,
+           roc_MARS,
+           roc_KNN,
+           roc_LDA,
+           roc_QDA,
+           roc_NB),
+      legacy.axes = TRUE) + 
+  scale_color_discrete(labels = paste0(model_names, " (", round(auc, 3), ")"), name = "Model Type (AUC)") + 
+  geom_abline(intercept = 0, slope = 1, color = "grey") + 
+  labs(
+    x = "False Positive Rate",
+    y = "True Positive Rate",
+    title = "ROC Curves",
+    subtitle = "Applied to Testing Data"
+  ) + 
+  theme(legend.position = "right")
+```
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 3}
+(train_roc_graph + train_sens_graph + train_spec_graph) + plot_annotation(
+  title = "Fig.4 Initial Performance Metrics"
+)
+```
+```{r, echo = FALSE, fig.align = "center", fig.height = 4}
+metrics_training_plot + ROC_plot_test_data
+```
+
+We find limited stratification by AUC, with the MARS model performing best (median AUC of 0.733), followed by elastic net (median AUC of 0.731) and GAM (median AUC of 0.727). The worst performer on this metric was QDA (median AUC of 0.699). QDA also has by far the highest sensitivity (17.8%) but lowest specificity (94.8%). Based on this training performance, and naive to any performance on testing data, we would choose the MARS model because it maximizes AUC and, second only to the QDA model (which has poorer AUC), also maximizes F-score and sensitivity (recall), which means that the test is better at detecting the positives -- quite important in the medical context. Normally, we would only apply our chosen model to the test data based on training performance, but out of interest, we checked the ROC curves for all of them. The MARS model has the second best AUC (0.722), while the QDA has the second-worst AUC. Generally, our ROCs look only "OK", and our 85% accuracy for most models is close to the No Information Rate, which isn’t that insightful given the class imbalance.
+
+### Next Steps with Class Imbalance
+
+```{r, include = FALSE}
+# Try oversampling / upsampling
+
+set.seed(2132)
+
+upsample_training_df = upsample(data = training_df, cat_col = "ten_year_chd")
+
+x_train_upsample = model.matrix(ten_year_chd ~ . , upsample_training_df)[, -1]
+y_train_upsample = upsample_training_df$ten_year_chd
+
+glm_grid = expand.grid(alpha = seq(0, 1, length = 11),
+                       lambda = exp(seq(-8, -3, length = 19)))
+
+logit_glm_upsample = train(x = x_train_upsample,
+                  y = y_train_upsample,
+                  method = "glmnet",
+                  tuneGrid = glm_grid,
+                  metric = "ROC",
+                  trControl = ctrl,
+                  family = "binomial",
+                  preProcess = c("center", "scale", "BoxCox"))
+
+GAM_model_upsample = train(x = x_train_upsample,
+                  y = y_train_upsample,
+                  method = "gam",
+                  metric = "ROC",
+                  family = "binomial",
+                  trControl = ctrl,
+                  tuneGrid = GAM_grid,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+MARS_model_upsample = train(x = x_train_upsample,
+                  y = y_train_upsample,
+                  method = "earth",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  tuneGrid = MARS_grid,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+KNN_model_upsample = train(x = x_train_upsample,
+                  y = y_train_upsample,
+                  method = "knn",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  tuneGrid = data.frame(k = seq(1, 300, by = 5)),
+                  preProcess = c("center", "scale", "BoxCox"))
+
+LDA_model_upsample = train(x = x_train_upsample,
+                  y = y_train_upsample,
+                  method = "lda",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+QDA_model_upsample = train(x = x_train_upsample,
+                  y = y_train_upsample,
+                  method = "qda",
+                  metric = "ROC",
+                  trControl = ctrl,
+                  preProcess = c("center", "scale", "BoxCox"))
+
+NB_model_upsample = train(x = x_train_upsample,
+                  y = y_train_upsample,
+                  method = "nb",
+                  tuneGrid = nb_grid,
+                  metric = "ROC",
+                  trControl = ctrl,
+                  preProcess = c("center", "scale", "BoxCox"))
+```
+
+```{r, include = FALSE}
+res_upsample = resamples(list(GLMNET = logit_glm_upsample,
+                     GAM = GAM_model_upsample,
+                     MARS = MARS_model_upsample,
+                     KNN = KNN_model_upsample,
+                     LDA = LDA_model_upsample,
+                     QDA = QDA_model_upsample,
+                     NB = NB_model_upsample))
+
+summary(res_upsample)
+
+upsample_resampling_plot = bwplot(res_upsample, layout = c(3, 1))
+
+upsample_roc_graph = ggplot(res_upsample, metric = "ROC") + 
+  labs(
+    x = "Model",
+    y = "AUC",
+    title = "Training Performance"
+  )
+upsample_sens_graph = ggplot(res_upsample, metric = "Sens") + 
+  labs(
+    y = "Sensitivity",
+    title = "Training Performance"
+  )
+upsample_spec_graph = ggplot(res_upsample, metric = "Spec")  + 
+  labs(
+    y = "Specificity",
+    title = "Training Performance"
+  )
+```
+
+```{r, include = FALSE}
+# Create function to produce precision, recall, and F-score for optimal training models (with upsampling!)
+metrics = function(model){
+  
+  prediction = predict(model, newdata = x_train_upsample, type = "raw")
+  x = confusionMatrix(data = as.factor(prediction),
+                  reference = y_train_upsample,
+                  positive = "CHD_present")
+  
+  TP = x$table[1, 1]
+  TN = x$table[2, 2]
+  FP = x$table[1, 2]
+  FN = x$table[2, 1]
+  
+  Precision = (TP / (TP + FP))
+  Recall = (TP / (TP + FN))
+  F_Score = (2 * Precision * Recall / (Precision + Recall))
+  
+  print(paste0("Precision % (training data): ", round(Precision * 100, 1)))
+  print(paste0("Recall % (training data): ", round(Recall * 100, 1)))
+  print(paste0("F-Score % (training data): ", round(F_Score * 100, 1)))
+  
+}
+
+metrics(logit_glm_upsample)
+metrics(GAM_model_upsample)
+metrics(MARS_model_upsample)
+metrics(KNN_model_upsample)
+metrics(LDA_model_upsample)
+metrics(QDA_model_upsample)
+metrics(NB_model_upsample)
+
+precision_upsample = c(68.6, 70.3, 70.1, 100, 68.3, 77.9, 82.1)
+recall_upsample = c(69.8, 72.5, 70.5, 100, 69.5, 29.8, 45.3)
+f_score_upsample = c(69.2, 71.4, 70.3, 100, 68.9, 43.1, 58.4)
+
+training_metrics_upsample = cbind(model_names, precision_upsample, recall_upsample, f_score_upsample) %>% 
+  as.data.frame() %>% 
+  mutate(
+    precision_upsample = as.numeric(precision_upsample),
+    recall_upsample = as.numeric(recall_upsample),
+    f_score_upsample = as.numeric(f_score_upsample)
+  )
+
+metrics_training_plot_upsampled = training_metrics_upsample %>% 
+  ggplot(aes(x = precision_upsample, y = recall_upsample)) + 
+  geom_point(aes(size = f_score_upsample, color = model_names)) + 
+  xlim(0, 100) + 
+  ylim(0, 100) + 
+  labs(
+    x = "Precision",
+    y = "Recall",
+    size = "F Score",
+    color = "Model Type",
+    title = "Precision vs. Recall",
+    subtitle = "From Upsampled Training Data"
+  ) + 
+  theme(legend.position = "left")
+```
+
+```{r, include = FALSE}
+# Check performance on test data (ROC curves), with upsampling
+logit_glm_predict_upsample = predict(logit_glm_upsample, newdata = x_test, type = "prob")[, 1]
+GAM_predict_upsample = predict(GAM_model_upsample, newdata = x_test, type = "prob")[, 1]
+MARS_predict_upsample = predict(MARS_model_upsample, newdata = x_test, type = "prob")[, 1]
+KNN_predict_upsample = predict(KNN_model_upsample, newdata = x_test, type = "prob")[, 1]
+LDA_predict_upsample = predict(LDA_model_upsample, newdata = x_test, type = "prob")[, 1]
+QDA_predict_upsample = predict(QDA_model_upsample, newdata = x_test, type = "prob")[, 1]
+NB_predict_upsample = predict(NB_model_upsample, newdata = x_test, type = "prob")[, 1]
+
+roc_glm_upsample = roc(y_test, logit_glm_predict_upsample)
+roc_GAM_upsample = roc(y_test, GAM_predict_upsample)
+roc_MARS_upsample = roc(y_test, MARS_predict_upsample)
+roc_KNN_upsample = roc(y_test, KNN_predict_upsample)
+roc_LDA_upsample = roc(y_test, LDA_predict_upsample)
+roc_QDA_upsample = roc(y_test, QDA_predict_upsample)
+roc_NB_upsample = roc(y_test, NB_predict_upsample)
+
+auc = c(roc_glm_upsample$auc[1], 
+        roc_GAM_upsample$auc[1],
+        roc_MARS_upsample$auc[1],
+        roc_KNN_upsample$auc[1],
+        roc_LDA_upsample$auc[1],
+        roc_QDA_upsample$auc[1],
+        roc_NB_upsample$auc[1])
+
+model_names = c("GLMNet",
+                "GAM",
+                "MARS",
+                "KNN",
+                "LDA",
+                "QDA",
+                "NB")
+
+ROC_plot_upsample = ggroc(list(roc_glm_upsample,
+           roc_GAM_upsample,
+           roc_MARS_upsample,
+           roc_KNN_upsample,
+           roc_LDA_upsample,
+           roc_QDA_upsample,
+           roc_NB_upsample),
+      legacy.axes = TRUE) + 
+  scale_color_discrete(labels = paste0(model_names, " (", round(auc, 3), ")"), name = "Model Type (AUC)") + 
+  geom_abline(intercept = 0, slope = 1, color = "grey") + 
+  labs(
+    x = "False Positive Rate",
+    y = "True Positive Rate",
+    title = "ROC Curves (w/ Upsampling)",
+    subtitle = "Applied to Testing Data"
+  ) + 
+  theme(legend.position = "right")
+```
+
+```{r, echo = FALSE, fig.align = "center", fig.height = 2.5}
+(upsample_roc_graph + upsample_sens_graph + upsample_spec_graph) + plot_annotation(
+  title = "Fig.5 Performance Metrics After Upsampling"
+)
+```
+```{r, echo = FALSE, fig.align = "center", fig.height = 4}
+metrics_training_plot_upsampled + ROC_plot_upsample
+```
+
+Given class imbalance, we first attempted to upsample from our `CHD_positive` training observations. Through upsampling, we improved our training model performance, with median KNN AUC reaching as high as 0.93 and an F-score of 100%. Purely based on these metrics, we may have chosen the KNN model as our final model, but from an application perspective, the lack of clear connection between predictors and outcome is problematic. In addition, once we looked at how our models performed on the test data with ROC curves, the KNN was indeed the worst — even worse than it was *without* upsampling, likely because of underfitting (as our k tuning parameter seems high compared to $\sqrt n$). Overall, while our model performance improved on the training data with upsampling, it did not improve on the test data. 
+
+We try one last approach, which is to vary the classification probability threshold, generally 0.5 by default. Because ROC curves are invariant to such transformation, we did this by reserving half of our test data for an intermediate step, which we call “validation”,  before "true" testing. Once we've trained our models on the original 80% of observations, we then make predictions on our validation data set and use those predictions to optimize our new threshold before applying the new cutoff to our test prediction probabilities for both the upsampled training data and the original training data. We also conducted similar performance tests without changing the probability class cutoff to better ascertain impact of the methodology. 
+
+```{r, include = FALSE}
+# To compare to metrics from test performance without changing probability thresholds OR upsampling
+metrics = function(model){
+  
+  prediction = predict(model, newdata = x_test, type = "raw")
+  x = confusionMatrix(data = as.factor(prediction),
+                  reference = y_test,
+                  positive = "CHD_present")
+  
+  TP = x$table[1, 1]
+  TN = x$table[2, 2]
+  FP = x$table[1, 2]
+  FN = x$table[2, 1]
+  
+  Precision = (TP / (TP + FP))
+  Recall = (TP / (TP + FN))
+  F_Score = (2 * Precision * Recall / (Precision + Recall))
+  
+  print(paste0("Precision % (training data): ", round(Precision * 100, 1)))
+  print(paste0("Recall % (training data): ", round(Recall * 100, 1)))
+  print(paste0("F-Score % (training data): ", round(F_Score * 100, 1)))
+  
+}
+
+metrics(logit_glm)
+metrics(GAM_model)
+metrics(MARS_model)
+metrics(KNN_model)
+metrics(LDA_model_caret)
+metrics(QDA_model_caret)
+metrics(NB_model)
+
+metrics(logit_glm_upsample)
+metrics(GAM_model_upsample)
+metrics(MARS_model_upsample)
+metrics(KNN_model_upsample)
+metrics(LDA_model_upsample)
+metrics(QDA_model_upsample)
+metrics(NB_model_upsample)
+
+# Create new partition of test data into validation set and true hold-out set
+
+set.seed(2132)
+
+# Or, partition test set into half and half
+index_validation = createDataPartition(testing_df$ten_year_chd,
+                                       p = 0.5,
+                                       list = FALSE)
+
+
+validation_df = testing_df[index_validation, ]
+holdout_df = testing_df[-index_validation, ]
+
+x_validate = model.matrix(ten_year_chd ~ . , validation_df)[, -1]
+x_holdout_test = model.matrix(ten_year_chd ~ ., holdout_df)[, -1]
+y_validate = validation_df$ten_year_chd
+y_holdout_test = holdout_df$ten_year_chd
+
+# To calculate new thresholds, then apply to hold-out data and find key metrics for imbalanced classes
+new_thresholds = function(model){
+  
+  model_validate_probs = predict(model, newdata = x_validate, type = "prob")[, 2]
+  
+  model_roc_validate = roc(y_validate, model_validate_probs)
+  
+  new_thresh = coords(model_roc_validate, x = "best", best.method = "youden", best.weights = c(2, 0.15))
+  
+  model_test_probs = predict(model, newdata = x_holdout_test, type = "prob")[, 2]
+  
+  pred_class = factor(ifelse(model_test_probs < new_thresh$threshold, "CHD_present", "CHD_absent"))
+  
+  x = confusionMatrix(data = as.factor(pred_class), reference = y_holdout_test, positive = "CHD_present")
+  
+  TP = x$table[1, 1]
+  TN = x$table[2, 2]
+  FP = x$table[1, 2]
+  FN = x$table[2, 1]
+  
+  Precision = (TP / (TP + FP))
+  Recall = (TP / (TP + FN))
+  F_Score = (2 * Precision * Recall / (Precision + Recall))
+  
+  print(paste0("Precision % (testing data): ", round(Precision * 100, 1)))
+  print(paste0("Recall % (testing data): ", round(Recall * 100, 1)))
+  print(paste0("F-Score % (testing data): ", round(F_Score * 100, 1)))
+  
+}
+
+new_thresholds(logit_glm)
+new_thresholds(GAM_model)
+new_thresholds(MARS_model)
+new_thresholds(KNN_model)
+new_thresholds(LDA_model_caret)
+new_thresholds(QDA_model_caret)
+new_thresholds(NB_model)
+
+new_thresholds(logit_glm_upsample)
+new_thresholds(GAM_model_upsample)
+new_thresholds(MARS_model_upsample)
+new_thresholds(KNN_model_upsample)
+new_thresholds(LDA_model_upsample)
+new_thresholds(QDA_model_upsample)
+new_thresholds(NB_model_upsample)
+
+model_names = c("GLMNet", "GAM", "MARS", "KNN", "LDA", "QDA", "NB", "GLMNet", "GAM", "MARS", "KNN", "LDA", "QDA", "NB", "GLMNet", "GAM", "MARS", "KNN", "LDA", "QDA", "NB", "GLMNet", "GAM", "MARS", "KNN", "LDA", "QDA", "NB")
+upsampling = c("no", "no", "no", "no", "no", "no", "no", "no", "no", "no", "no", "no", "no", "no", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes")
+cutoff_change = c("no", "no", "no", "no", "no", "no", "no", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "no", "no", "no", "no", "no", "no", "no")
+precision = c(100, 83.3, 58.3, 0, 66.7, 29.4, 100, 18.5, 17.4, 17.2, 17.5, 17.6, 18.3, 17.6, 18.7, 16.7, 19.4, 15.1, 18.1, 17.8, 14.8, 27.4, 26.7, 27.4, 16.7, 26.7, 33.8, 29.2)
+recall = c(0.9, 4.5, 6.3, 0, 5.4, 9, 0.9, 87.3, 94.5, 90.9, 92.7, 87.3, 76.4, 89.1, 89.1, 92.7, 90.9, 100, 87.3, 83.6, 94.5, 66.7, 64.9, 64, 17.1, 66.7, 20.7, 25.2)
+f_score = c(1.8, 8.5, 11.4, 0, 10, 13.8, 1.8, 30.5, 29.4, 29, 29.5, 29.3, 29.6, 29.4, 30.9, 28.3, 31.9, 26.2, 30, 29.3, 25.6, 38.8, 37.8, 38.4, 16.9, 38.1, 25.7, 27.1)
+
+test_metrics = cbind(model_names, upsampling, cutoff_change, precision, recall, f_score) %>% 
+  as.data.frame() %>% 
+  mutate(
+    precision = as.numeric(precision),
+    recall = as.numeric(recall),
+    f_score = as.numeric(f_score)
+  )
+
+testing_metrics_all = test_metrics %>% 
+  ggplot(aes(x = precision, y = recall)) + 
+  geom_point(aes(size = f_score, color = model_names), alpha = 0.4) + 
+  xlim(0, 100) + 
+  ylim(0, 100) + 
+  labs(
+    x = "Precision",
+    y = "Recall",
+    size = "F Score",
+    color = "Model Type",
+    title = "Fig. 6: Precision vs. Recall from All Models",
+    subtitle = "Model Performance on Testing Data",
+    caption = "Thresholds from Youden's J statistic, default prevalence rate (of 0.15), and a 2x relative cost of FN vs. FP"
+  ) + 
+  theme(legend.position = "left") + 
+  facet_grid(upsampling  ~ cutoff_change, labeller = label_both)
+
+```
+
+```{r, echo = FALSE, fig.height = 3.8}
+testing_metrics_all
+```
+
+Compared to baseline (no upsampling or cutoff change), upsampling led to greater precision improvement, cutoff changing led to greater recall, and F-scores were maximized with upsampling but no cutoff change - especially for elastic net (F-score of 38.8%) and MARS model (F-score of 38.4%) — when applied to the test data. However, it’s poor practice to select a model based on test performance. Based purely on training data performance, we would have gone with our original MARS model over the upsampled KNN model because of the “black box” nature of KNN, and because its anomalous training AUC would have cautioned us of lack of fit. 
+
+### Limitations
+
+First, we do not include any method of imputation. In addition, because our data has imbalanced classes, we upsampled without having learned the ideal way to do so. We exclude interaction terms in this analysis, although there may very well be some effect measure modification. Finally, we look forward to building on this work through alternative machine learning models, including random forest, SVM, and boosting. 
+
+## Conclusion
+
+Overall, our modeling tells us that the most important determinants of heart disease tend to be age, blood pressure, glucose, sex, and the number of cigarettes smoked per day, which jibes with our exploratory analysis. That said, there may be other covariates, such as race and income, that may have stronger explanatory power of our `ten_year_chd` outcome. Given the predictors at our disposal, our attempts to find a model with an AUC over 0.80 did not prevail without upsampling, barring a likely-underfit KNN model. However, even without resampling or changing the probability cutoff for classification as a `CHD_present`, we had a MARS model with a reasonably high AUC and F-score. In particular, this is a critical measure in our case because the penalty for a false negative should be higher than for a false positive. However, a key limitation of the MARS method is the fact that it operates in a stepwise greedy manner, and so a future solution may involve considering all possible hinge functions simultaneously before running penalized regression, with the tradeoff of high computational expensive.
