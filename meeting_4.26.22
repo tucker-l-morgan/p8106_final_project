@@ -71,3 +71,30 @@ Fri Apr 29 - GitHub Infrastructure; Data Cleaned / Imputed / Processed
 Thurs May 5 - Models Run
 Tues May 10 - Draft Report completed
 Thurs May 12 - Done
+
+## Notes on How Final Will Be Graded
+
+Intro and EDA was 20%, pretty lenient here
+Model Training was most important part 40%, graded by two TAs
+- 15 points allocated to modeling strategy, fitting less and more flexible models important because truth unknown
+- 15 points allocated to model training, whether properly trained
+- 10 points allocated to model comparison / selection (CV)
+Model Interpretation was 30%, only need to discuss the final model for interpretation
+Clarity of report was 10%, decided by 4 TAs and Yifei (strict with her two points)
+
+Don't use "Final Project" as title lol
+EDA:
+- Don't necessarily use class examples for EDA
+- Don't forget to adjust graphical parameters of example code
+- Scatter plots not suitable for binary predictors
+Avoid using variable names in the main text - use plain English instead
+If variables are categorical, give all possible values
+
+Could use a figure with CV Tuning Parameter plots as sub-plots. Could help keep us under the limit :)
+
+Don't forget to describe the final model; try to include visualizations / form of final model if possible
+- if final model is a black-box model, check the lecture on model interpretation
+
+Try adding notes to figures and tables if that improves the report!
+
+What to do about class imbalance? If your model is trained on oversampled data, need to be careful training on oversampled data because probability will be biased upward. AUC can still be good measure here because AUC is only concerned with order of probability, not exact value.
