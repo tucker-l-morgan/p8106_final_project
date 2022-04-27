@@ -1,0 +1,192 @@
+---
+title: 'Applications in Machine Learning to Predict Coronary Heart Disease'
+author: 'Zachary Katz (zak2132), Hun Lee (sl4836), and Tucker Morgan (tlm2152)'
+date: "5/12/2022"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+    toc: yes
+    toc_depth: 3
+  fontsize: 10pt
+  geometry: margin=0.5in
+  header-includes:
+    -\usepackage{fancyhdr}
+    -\usepackage{lipsum}
+    -\pagestyle{fancy}
+    -\fancyhead[R]{\thepage}
+    -\fancypagestyle{plain}{\pagestyle{fancy}}
+---
+
+```{r, include = FALSE, echo = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(skimr)
+library(RCurl)
+library(visdat)
+library(reshape2)
+library(DataExplorer)
+library(ggcorrplot)
+library(caret)
+library(vip)
+library(mgcv)
+library(klaR)
+library(pROC)
+library(ggridges)
+library(corrplot)
+library(AppliedPredictiveModeling)
+library(patchwork)
+library(Hmisc)
+library(groupdata2)
+library(reshape)
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  cache = TRUE,
+  fig.height = 6,
+  fig.width = 8
+  )
+
+theme_set(theme_minimal() + theme(
+  legend.position = "bottom",
+  plot.title = element_text(hjust = 0.5)
+))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis",
+  digits = 3)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+
+```
+
+## Introduction
+
+```{r, include = FALSE}
+# Data URL
+URL = getURL("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
+
+# Read in all data, including missing
+all_df = read.csv(text = URL) %>% 
+  janitor::clean_names() %>% 
+  as.data.frame()
+
+# Factor labels for categorical variables and other recoding
+cleaned_df = all_df %>% 
+  mutate(male = factor(male),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes))  %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD_present","CHD_absent") %>%
+           fct_relevel("CHD_present", "CHD_absent")) %>%
+  dplyr::rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female")) %>% 
+  mutate(
+    education = case_when(
+      education == "1" ~ "some_HS",
+      education == "2" ~ "HS_grad",
+      education == "3" ~ "some_college",
+      education == "4" ~ "college_grad"
+    ),
+    current_smoker = recode(
+      current_smoker,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    bp_meds = recode(
+      bp_meds,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_stroke = recode(
+      prevalent_stroke,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_hyp = recode(
+      prevalent_hyp,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    diabetes = recode(
+      diabetes,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    education = factor(education, levels = c("some_HS", "HS_grad", "some_college", "college_grad"))
+  )
+```
+
+```{r, include = FALSE}
+
+# Number of rows with any missing data
+rows_missing_data = sum(!complete.cases(all_df))
+
+# Missing data pattern
+# 582 rows (13.7% of observations) missing 1+ data points
+# Highest missingness rates: glucose (9.15%), education (2.48%), bp_meds (1.25%), tot_chol (1.18%)
+missing_data_viz = all_df %>% 
+  vis_miss()
+```
+
+```{r, include = FALSE}
+# We should consider imputing for glucose only given highest correlation of these 4 missing variables with ten_year_chd, as well as much higher missingness rate
+# Beyond that, drop other missing rows
+
+# Correlation plot for all predictors
+all_preds_matrix = model.matrix(ten_year_chd ~ ., data = all_df)[, -1]
+
+all_vars_corrs = corrplot(cor(all_preds_matrix), method = "circle", type = "full")
+
+all_vars_corrs
+
+# Alternative using ggcorrplot for all vars
+ggplot_corr_alt = model.matrix(~0 + ., data = all_df) %>%
+  cor(use = "pairwise.complete.obs") %>% 
+  ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 2)
+
+ggplot_corr_alt
+```
+
+```{r}
+# Impute all missing values using MICE
+library(mice)
+
+# 50 iterations using predictive mean matching
+imputed_df = mice(all_df, 
+                  m = 5,
+                  maxit = 50,
+                  method = "pmm",
+                  seed = 100)
+
+summary(imputed_df)
+```
+
+```{r}
+# Impute using Hmisc
+# Note: assumes linearity in the variables being predicted
+library(Hmisc)
+
+# Example of imputing glucose column using median value
+all_df$glucose = with(all_df, impute(glucose, median))
+```
+
+```{r}
+# Bagged tree imputation using preProcess (note: could also use 'knnImpute' for method)
+# Use diabetes, since glucose is most highly correlated with it
+
+bag_impute = all_df %>% 
+  dplyr::select(glucose, diabetes) %>% 
+  preProcess(method = "bagImpute")
+
+imputed_glucose = predict(bag_impute, 
+                          all_df %>% dplyr::select(glucose, diabetes))
+
+all_df$glucose = imputed_glucose$glucose
+```
