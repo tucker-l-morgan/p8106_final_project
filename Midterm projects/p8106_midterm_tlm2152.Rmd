@@ -1,0 +1,372 @@
+---
+title: 'P8106 Midterm: Framingham Heart Study'
+author: "Tucker Morgan - tlm2152"
+date: "3/22/2022"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = TRUE, message = FALSE, warning = FALSE)
+
+options(error = function(){    # Beep on error
+  beepr::beep()
+  Sys.sleep(1)
+}
+)
+
+.Last <- function() {          # Beep on exiting session
+  beepr::beep()
+  Sys.sleep(1)
+}
+```
+
+```{r libraries}
+library(tidyverse)
+library(caret)
+```
+
+\newpage
+
+# Introduction
+
+```{r data import and cleaning}
+x <- url("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
+
+data <- read_csv(x) %>% janitor::clean_names()
+
+heart_data = data %>% 
+  na.omit() %>% 
+  mutate(male = factor(male),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes))  %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", 
+                               "CHD_present",
+                               "CHD_absent") %>%
+           fct_relevel("CHD_absent", 
+                       "CHD_present")) %>%
+  rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female")) %>% 
+  mutate(education = case_when(education == "1" ~ "some_HS",
+                               education == "2" ~ "HS_grad",
+                               education == "3" ~ "some_college",
+                               education == "4" ~ "college_grad"),
+         current_smoker = recode(current_smoker,
+                                 "1" = "yes",
+                                 "0" = "no"),
+         bp_meds = recode(bp_meds,
+                          "1" = "yes",
+                          "0" = "no"),
+         prevalent_stroke = recode(prevalent_stroke,
+                                   "1" = "yes",
+                                   "0" = "no"),
+         prevalent_hyp = recode(prevalent_hyp,
+                                "1" = "yes",
+                                "0" = "no"),
+         diabetes = recode(diabetes,
+                           "1" = "yes",
+                           "0" = "no"),
+         education = factor(education, 
+                            levels = c("some_HS", "HS_grad", "some_college", "college_grad"))
+  )
+
+heart_data$ten_year_chd <- relevel(heart_data$ten_year_chd, ref = "CHD_absent")
+
+neg_na_perc <- 
+  data %>% 
+  filter(ten_year_chd != 1) %>% 
+  is.na() %>% 
+  sum() / nrow(data %>% filter(ten_year_chd != 1))
+
+pos_na_perc <- 
+  data %>% 
+  filter(ten_year_chd == 1) %>% 
+  is.na() %>% 
+  sum() / nrow(data %>% filter(ten_year_chd == 1))
+```
+
+```{r data partitioning}
+set.seed(100)
+
+part_index <- createDataPartition(y = heart_data$ten_year_chd,
+                                  p = 0.8,
+                                  list = FALSE)
+
+heart_trn <- heart_data[part_index,]
+heart_tst <- heart_data[-part_index,]
+```
+
+In this report, I will examine a data set from the [Framingham Heart Study (linked)](https://framinghamheartstudy.org/). I will use various machine learning techniques in an attempt to predict the ten-year risk of coronary heart disease (CHD), `ten_year_chd`, a binary outcome, based on a set of 15 predictors. After removing NA values, the full data set has `r nrow(heart_data)` observations. Luckily, the proportion of observations with NA values and `ten_year_chd` = 1 (positive) is similar to the proportion of observations with NA values and `ten_year_chd` = 0 (negative), `r round(pos_na_perc, digits = 4)` for positive versus `r round(neg_na_perc, digits = 4)` for negative. Several variables require re-coding and factorizing before work begins, including `education`, `sex`, `current_smoker`, `bp_meds`, `prevalent_stroke`, `prevalent_hyp`, `diabetes`, and `ten_year_chd`.
+
+The data is split into 80% training data with `r nrow(heart_trn)` observations and 20% testing data with `r nrow(heart_tst)` observations. The training data will be used in exploratory analysis and for model training with the testing data being used after model selection to evaluate test performance. 
+
+```{r cleaning up 1}
+rm(x, neg_na_perc, pos_na_perc, data, heart_data)
+```
+
+
+# Exploratory Analysis
+
+First, looking at Figure 1 in the Appendix, we see the collinearities between the continuous predictors in the data set, the highest being just 0.78 between systolic (`sys_bp`) and diastolic (`dia_bp`) blood pressure. While this is notable, it is not so high as to be concerning or to warrant removal of predictors. We also see in Figure 2 there are not major differences between CHD-present (`ten_year_chd` = 1) and CHD-absent individuals for many of the continuous predictors. The predictors `dia_bp` and `sys_bp` tend to be slightly higher for CHD present individuals, but by a very small margin. The only continuous predictor with clear differences is `age` - CHD-present individuals tend to be older than CHD-absent individuals.
+
+In Table 1 of the Appendix, we see the percentage of CHD-present individuals is higher for males, individuals taking blood pressure medication (`bp_meds`), individuals who have experienced stroke (`stroke` or `prevalent_stroke`), individuals who have hypertension (`hyp` or `prevalent_hyp`), and individuals with diabetes (`diabetes`). There might be a relationship between `education` and `ten_year_chd` - we see a higher percentage of CHD positive individuals with just some high school education (Table 2). However, this is not as clear.
+
+# Models
+
+I am investigating four models as candidates for predicting `ten_year_chd`. Each model is trained on all predictors in the training data and assessed using cross-validation area-under-curve (AUC). Each of the models has different strengths, weaknesses, tuning parameters, and assumptions. Because we did not see concerning colinearities or relationships in exploratory analysis, I am not removing any predictors prior to fitting. However, I am scaling and centering the predictors in each model.
+
+```{r caret setup}
+set.seed(100)
+heart_trn_x <- model.matrix(ten_year_chd ~ ., heart_trn)[,-1]
+heart_trn_y <- heart_trn$ten_year_chd
+heart_trn_y <- relevel(heart_trn_y, ref = "CHD_absent")
+
+ctrl1 <- trainControl(method = "repeatedcv",
+                      repeats = 5,
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE)
+                      #verboseIter = TRUE)
+```
+
+```{r glm training}
+glm_fit <- train(x = heart_trn_x,
+                 y = heart_trn_y,
+                 method = "glm",
+                 metric = "ROC",
+                 trControl = ctrl1,
+                 preProcess = c("scale", "center"))
+```
+
+```{r elastic net training}
+set.seed(100)
+glmn_grid <- expand.grid(.alpha = seq(0, 1, length = 21),
+                         .lambda = exp(seq(-8, -1, length = 100)))
+myCol <- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+
+net_fit <- train(x = heart_trn_x,
+                 y = heart_trn_y,
+                 method = "glmnet",
+                 tuneGrid = glmn_grid,
+                 metric = "ROC",
+                 trControl = ctrl1,
+                 preProcess = c("scale", "center"))
+```
+
+```{r mars training}
+set.seed(100)
+mars_fit <- train(x = heart_trn_x,
+                  y = heart_trn_y,
+                  method = "earth",
+                  tuneGrid = expand.grid(degree = 1:3,
+                                         nprune = 2:18),
+                  metric = "ROC",
+                  trControl = ctrl1,
+                  preProcess = c("scale", "center"))
+
+#beepr::beep()
+```
+
+```{r naive bayes training}
+set.seed(100)
+nb_grid <- expand.grid(usekernel = c(FALSE, TRUE),
+                       fL = 1,
+                       adjust = seq(.2, 4, by = .2))
+
+nb_fit <- train(x = heart_trn_x,
+                y = heart_trn_y,
+                method = "nb",
+                tuneGrid = nb_grid,
+                metric = "ROC",
+                trControl = ctrl1,
+                preProcess = c("scale", "center"))
+
+#beepr::beep()
+```
+
+```{r comparing models}
+set.seed(100)
+res <- resamples(list(GLM = glm_fit, NET = net_fit, MARS = mars_fit, NB = nb_fit))
+res_summ <- summary(res)
+```
+
+```{r final metrics}
+tst_x <- model.matrix(ten_year_chd ~ ., heart_tst)[,-1]
+net_pred <- predict(net_fit,
+                    newdata = tst_x,
+                    type = "prob")[,2]
+roc_net <- pROC::roc(heart_tst$ten_year_chd, net_pred)
+
+cmat_pred <- predict(net_fit,
+                     newdata = tst_x)
+
+cmat_pred_prob <- predict(net_fit,
+                     newdata = tst_x,
+                     type = "prob")[,2]
+cmat_pred2 <- rep("CHD_absent", length(cmat_pred_prob))
+cmat_pred2[cmat_pred_prob > 0.2] <- "CHD_present"
+
+conf_mat <- confusionMatrix(data = as.factor(cmat_pred),
+                            reference = heart_tst$ten_year_chd,
+                            positive = "CHD_present")
+
+conf_mat2 <- confusionMatrix(data = as.factor(cmat_pred2),
+                            reference = heart_tst$ten_year_chd,
+                            positive = "CHD_present")
+```
+
+The first model is a **generalized linear model (GLM)** logistic regression with no tuning parameters or variable selection. This will serve as an interesting baseline to compare against the more complicated models to follow. As the name implies, logistic regression is a generalization of linear regression. In linear regression, we assume a linear relationship between some outcome, $Y$, and predictors $X_1,...,X_n$. The same is true for logistic regression, except the outcome is $\log{\frac{\pi}{1 - \pi}}$ where $\pi$ is a probability of belonging to a class - here `ten_year_chd` = 1. An advantage of GLM is relatively easy interpretability, however it has limited flexibility and may not accurately reflect the truth if non-linear relationships are in play. The fitted coefficients for the GLM can be seen in Table 3. We see that `sexfemale`, `age`, `sys_bp`, `cigs_per_day`, and `glucose` have the strongest relationships with our outcome. It will be interesting to see how this compares to other models.
+
+The second model is an **elastic net model** with a mixing parameter for least absolute shrinkage and selection operator (LASSO) and ridge regression penalties. This is another logistic model with the same assumptions as in GLM. However, there are two tuning parameters, $\alpha$ and $\lambda$. Parameter $\lambda$ indicates a penalty term that limits the number and/or magnitude of predictor coefficients in a model. There are two types of penalties - the $\ell_1$-norm associated with LASSO and the $\ell_2$-norm associated with ridge. Parameter $\alpha$ determines the mixture of these two penalties with $\alpha = 0$ being ridge regression and $\alpha = 1$ being LASSO. The optimal values for these tuning parameters are chosen via maximizing cross-validation AUC. The tuning parameter results can be seen in Figure 3, with an optimal mix of parameters is $\alpha$ = `r net_fit$bestTune[1]` and $\lambda$ = `r round(net_fit$bestTune[2], digits = 4)` resulting in the largest AUC. The selected variables can be seen in Table 4, and these align somewhat with the strongest relationships observed with GLM.
+
+The third model is a **multivariate adaptive regression splines (MARS) model**, which can incorporate non-linear features through products of hinge functions. It is typically well-suited for high-dimensional problems. There are again two tuning parameters here, the degree of interaction and the number of retained terms. A higher degree allows for higher order interactions of hinge functions. The tuning parameter results can be seen in Figure 4 with a degree of `r mars_fit$bestTune[2]` and number of terms equal to `r mars_fit$bestTune[1]` being optimal. The selected variables and associated hinge functions can be seen in Table 5. Again, we see some of the same predictors featured in MARS as in the previous models, namely `age`, `sys_bp`, `sexfemale`, `glucose`, and `cigs_per_day`. In the variable importance plot (VIP) in Figure 5, we see which variables were found to be most influential in the model building process.
+
+The fourth model is a **naive Bayes (NB) model**, which assumes all predictors are independent within each class and can use Gaussian or non-parametric distributions of predictors. The tuning parameters in the NB model are distribution type and bandwidth adjustment for the kernel density, which adds a small number to the counts for each feature to prevent non-zero probabilities in non-parametric estimations. The main weakness of NB is that the assumption of independent features is often incorrect. For example, in the Framingham Heart Study data set, `sys_bp` and `dia_bp` are very likely not independent measures since both measure blood pressure. The tuning parameter results for NB can be seen in Figure 6, where we see a non-parametric distribution and a bandwidth adjustment of `r nb_fit$bestTune[3]` maximize the AUC (labeled "ROC").
+
+Table 6 shows the results from cross-validation assessment of the four models. Based on these results, we select the elastic net model to be used for predictions with the testing data because it has the highest mean AUC. The final ROC curve and AUC for the elastic net against the test data can be seen in Figure 7, and a confusion matrix of predictions can be seen in Table 7.
+
+# Conclusions
+
+The final model has an AUC of `r round(roc_net$auc, digits = 4)`, which is somewhat acceptable, but not as close to 1 (perfect prediction) as we would like. Looking at Table 7, we see the model greatly underestimates the number of positive `ten_year_chd` instances. The kappa value, which we would like to be positive and close to 1, is only `r round(conf_mat$overall[2], digits = 4)`, and the sensitivity is only `r round(conf_mat$byClass[1], digits = 4)` meaning the model does not perform well in correctly identifying positive cases. The results in Table 7 are obtained using a decision boundary of $p = 0.5$, and adjusting this threshold can correctly classify a greater number of positive individuals as seen in Table 8. However, this also results in more false positives, a potentially distressing diagnosis with CHD, and this increases the overall misclassification error of the model from `r round(1 - conf_mat$overall[1], digits = 4)` to `r round(1 - conf_mat2$overall[1], digits = 4)`. This shows that changing the decision boundary will not result in the model being perfect.
+
+At the $p = 0.5$ decision boundary, the model is predicting almost every observation to be negative, and this is correct most of the time due to the class imbalance between `CHD_present` and `CHD_absent`. Overall, I was hoping for better model performance, however I am interested to see if improvements could be made in future work by adjusting for the class imbalance and imputing missing data to obtain more information from the data set.
+
+# Appendix
+
+## Figures
+
+```{r cont pred corr plot}
+heart_trn %>% 
+  dplyr::select(-sex, -education, -current_smoker, -bp_meds, -prevalent_stroke, -prevalent_hyp, -diabetes, -ten_year_chd) %>% 
+  cor() %>% 
+  corrplot::corrplot(method = "number",
+                     type = "upper",
+                     mar = c(0, 0, 2, 0),
+                     title = "Figure 1: Continuous Predictor Correlations")
+```
+
+\newpage
+
+**Figure 2: Continuous Predictor Feature Plot**
+
+```{r cont pred feature plot, fig.height = 8}
+featurePlot(x = heart_trn[,c(2, 5, 10:15)],
+            y = heart_trn$ten_year_chd,
+            plot = "density",
+            labels = c("", ""),
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            pch = "|",
+            layout = c(2, 4),
+            auto.key = list(columns = 2))
+```
+
+```{r tuning parameter plots 1, fig.height = 8}
+plot(net_fit, par.settings = myPar, xTrans = function(x) log(x),
+     main = "Figure 3: Elastic Net Tuning Parameters")
+```
+
+```{r tuning parameter plots 2, fig.height = 4}
+plot(mars_fit, main = "Figure 4: MARS Tuning Parameters")
+vip::vip(mars_fit) +
+  ggtitle("Figure 5: MARS Variable Importance Plot")
+
+plot(nb_fit, main = "Figure 6: Naive Bayes Tuning Parameters")
+```
+
+```{r final ROC plots, fig.height = 4}
+plot(roc_net, legacy.axes = TRUE, col = "dodgerblue2",
+     main = "Figure 7: Elastic Net ROC Curve", print.auc = TRUE)
+```
+
+\newpage
+
+## Tables
+
+```{r categorical pred table}
+cat_vec <- c("sex", "current_smoker", "bp_meds", "prevalent_stroke", "prevalent_hyp", "diabetes")
+cat_dat <- heart_trn[,c(1, 3, 4, 6:9, 16)] %>% select(-education)
+cats_tbl <- function(data, vec){
+
+  tbl_list = list()
+  for (i in 1:length(vec)){
+    cat_df <- 
+    data %>% 
+    group_by(data[i]) %>% #sex, education, current_smoker, bp_meds, prevalent_stroke, prevalent_hyp, diabetes) %>% 
+    count(ten_year_chd) %>% 
+    pivot_wider(names_from = ten_year_chd,
+                values_from = n) %>% 
+    mutate(total = CHD_present + CHD_absent,
+           chd_perc = round(CHD_present / total, digits = 2)) %>% 
+    dplyr::select(-CHD_present, -CHD_absent, -total)
+    
+    tbl_list[[i]] = cat_df
+  }
+  
+  tbl_df = data.frame(do.call(cbind, tbl_list), check.names = FALSE)
+  
+  return(tbl_df)
+}
+
+cats_tbl(data = cat_dat, vec = cat_vec) %>% 
+  rename(chd_1 = chd_perc...2,
+         chd_2 = chd_perc...4,
+         chd_3 = chd_perc...6,
+         chd_4 = chd_perc...8,
+         chd_5 = chd_perc...10,
+         chd_6 = chd_perc...12,
+         cur_smoke = current_smoker,
+         stroke = prevalent_stroke,
+         hyp = prevalent_hyp) %>% 
+  knitr::kable(caption = "Ten-Year CHD % Positive for Binary Variables")
+
+heart_trn[,c(1, 3, 4, 6:9, 16)] %>% 
+  group_by(education) %>%
+  count(ten_year_chd) %>% 
+  pivot_wider(names_from = ten_year_chd,
+                values_from = n) %>% 
+  mutate(total = CHD_present + CHD_absent,
+         chd_perc = round(CHD_present / total, digits = 2)) %>% 
+  dplyr::select(-CHD_present, -CHD_absent, -total) %>% 
+  knitr::kable(caption = "Ten-Year CHD % Positive for Education Levels")
+
+rm(cats_tbl, cat_vec, cat_dat)
+```
+
+```{r model coefficients 1}
+coef(glm_fit$finalModel) %>% 
+  knitr::kable(caption = "GLM Coefficients")
+```
+
+\newpage
+
+```{r model coefficients 2}
+coef(net_fit$finalModel, net_fit$finalModel$lambdaOpt) %>% 
+  as.matrix() %>% 
+  data.frame() %>% 
+  filter(s1 != 0) %>% 
+  knitr::kable(caption = "Elastic Net Coefficients")
+
+coef(mars_fit$finalModel) %>% 
+  knitr::kable(caption = "MARS Coefficients")
+```
+
+```{r summary tables}
+res_summ$statistics$ROC %>% 
+  as.data.frame() %>% 
+  knitr::kable(caption = "Cross-Validation AUC Values")
+
+conf_mat$table %>% 
+  knitr::kable(caption = "Elastic Net Confusion Matrix")
+
+conf_mat2$table %>% 
+  knitr::kable(caption = "Adjusted Elastic Net Confusion Matrix - p = 0.2")
+```
+
