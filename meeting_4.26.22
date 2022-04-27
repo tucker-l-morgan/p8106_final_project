@@ -1,0 +1,100 @@
+4.26.2022 Meeting Notes
+
+## Midterm Project Summaries:
+
+## Tucker
+
+Tried GLM, GLMNET, MARS, and Naive Bayes
+80/20 split, close CV results overall
+
+Elastic Net - Highest AUC, test AUC of 0.737
+- sex
+- age
+- cigs_per_day
+- stroke
+- hypertension
+- cholesterol
+- systolic bp
+- glucose
+
+## Zak
+
+Tried GLMNET, GAM, MARS, KNN, LDA, QDA, NB
+80/20 split
+centering, scaling, and box-cox
+10-fold CV repeated 5 times
+
+MARS model performed best for AUC, Sensitivity and Specificity (0.5 decision boundary)
+- age
+- sex
+- sys_bp
+- cigs_per_day
+
+Precision vs Recall - class imbalance
+F-score
+
+Tried upsampling
+
+## Hun
+
+Parametric vs nonparametric
+
+Checked parametric assumptions, normality, independence, lack of multicollinearity
+
+MARS and Supervised PCA - very little difference
+
+Parametric - best was LASSO
+
+
+## Final Project
+
+Perform imputation, preprocessing(center, scale, box-cox)
+
+Exploratory Analysis
+
+Models:
+- MARS
+- GLMNET
+- Random Forest
+- AdaBoost
+- GAM ?
+- Hierarchical Clustering
+- Neural Network ?
+
+Assessment:
+- AUC
+- Kappa
+- Variable Importance Plot
+
+Timeline:
+Fri Apr 29 - GitHub Infrastructure; Data Cleaned / Imputed / Processed
+Thurs May 5 - Models Run
+Tues May 10 - Draft Report completed
+Thurs May 12 - Done
+
+## Notes on How Final Will Be Graded
+
+Intro and EDA was 20%, pretty lenient here
+Model Training was most important part 40%, graded by two TAs
+- 15 points allocated to modeling strategy, fitting less and more flexible models important because truth unknown
+- 15 points allocated to model training, whether properly trained
+- 10 points allocated to model comparison / selection (CV)
+Model Interpretation was 30%, only need to discuss the final model for interpretation
+Clarity of report was 10%, decided by 4 TAs and Yifei (strict with her two points)
+
+Don't use "Final Project" as title lol
+EDA:
+- Don't necessarily use class examples for EDA
+- Don't forget to adjust graphical parameters of example code
+- Scatter plots not suitable for binary predictors
+Avoid using variable names in the main text - use plain English instead
+If variables are categorical, give all possible values
+
+Could use a figure with CV Tuning Parameter plots as sub-plots. Could help keep us under the limit :)
+
+Don't forget to describe the final model; try to include visualizations / form of final model if possible
+- if final model is a black-box model, check the lecture on model interpretation
+
+Try adding notes to figures and tables if that improves the report!
+
+What to do about class imbalance? If your model is trained on oversampled data, need to be careful training on oversampled data because probability will be biased upward. AUC can still be good measure here because AUC is only concerned with order of probability, not exact value.
