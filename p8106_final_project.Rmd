@@ -17,15 +17,16 @@ output:
     -\fancypagestyle{plain}{\pagestyle{fancy}}
 ---
 
-```{r, include = FALSE, echo = FALSE}
+```{r libraries and setup, include = FALSE, echo = FALSE}
+# TM: are we using all of these? can we remove if not?
 library(tidyverse)
 library(ggplot2)
 library(skimr)
-library(RCurl)
+library(RCurl) # do we use this for anything besides URL? if not, let's remove bc I changed to url() below
 library(visdat)
 library(reshape2)
 library(DataExplorer)
-library(ggcorrplot)
+library(ggcorrplot) # I prefer this option, we should remove whichever lib we don't use
 library(caret)
 library(vip)
 library(mgcv)
@@ -65,12 +66,12 @@ scale_fill_discrete = scale_fill_viridis_d
 
 ## Introduction
 
-```{r, include = FALSE}
+```{r importing and cleaning data, include = FALSE}
 # Data URL
-URL = getURL("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
+URL = url("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
 
 # Read in all data, including missing
-all_df = read.csv(text = URL) %>% 
+all_df = read_csv(URL) %>% # TM - for some reason, the getURL method does not work consistently for me, changed to just use base R
   janitor::clean_names() %>% 
   as.data.frame()
 
@@ -123,8 +124,7 @@ cleaned_df = all_df %>%
   )
 ```
 
-```{r, include = FALSE}
-
+```{r missing data, include = FALSE}
 # Number of rows with any missing data
 rows_missing_data = sum(!complete.cases(all_df))
 
@@ -135,7 +135,7 @@ missing_data_viz = all_df %>%
   vis_miss()
 ```
 
-```{r, include = FALSE}
+```{r correlation plots, include = FALSE}
 # We should consider imputing for glucose only given highest correlation of these 4 missing variables with ten_year_chd, as well as much higher missingness rate
 # Beyond that, drop other missing rows
 
@@ -154,33 +154,39 @@ ggplot_corr_alt = model.matrix(~0 + ., data = all_df) %>%
 ggplot_corr_alt
 ```
 
-```{r}
+```{r imputing w mice}
 # Impute all missing values using MICE
 library(mice)
 
 # 50 iterations using predictive mean matching
-imputed_df = mice(all_df, 
+# TM: changed object name because output is not a dataframe
+# TM: I also think this method is most common for inferential settings where inference is performed with each of the 5 imputed datasets, but I don't think we care to do this; see: https://bookdown.org/max/FES/imputation-methods.html
+# the above resource also recommends imputing during the resampling process so that imputation variability is captured, but I don't think Yifei mentioned anything about this? So I think we go with bagging imputation at the very start
+imputed_mids = mice(all_df, 
                   m = 5,
                   maxit = 50,
                   method = "pmm",
                   seed = 100)
 
-summary(imputed_df)
+summary(imputed_mids)
+# this function outputs the completed dataset from the mids object
+completed_df <- complete(imputed_mids)
+skimr::skim(completed_df)
 ```
 
-```{r}
+```{r imputing w Hmisc}
 # Impute using Hmisc
 # Note: assumes linearity in the variables being predicted
 library(Hmisc)
 
 # Example of imputing glucose column using median value
+# TM: the weakest option IMO
 all_df$glucose = with(all_df, impute(glucose, median))
 ```
 
-```{r}
+```{r imputing w preProcess}
 # Bagged tree imputation using preProcess (note: could also use 'knnImpute' for method)
 # Use diabetes, since glucose is most highly correlated with it
-
 bag_impute = all_df %>% 
   dplyr::select(glucose, diabetes) %>% 
   preProcess(method = "bagImpute")
@@ -189,4 +195,5 @@ imputed_glucose = predict(bag_impute,
                           all_df %>% dplyr::select(glucose, diabetes))
 
 all_df$glucose = imputed_glucose$glucose
+skimr::skim(all_df)
 ```
