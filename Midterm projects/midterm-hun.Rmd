@@ -1,0 +1,792 @@
+---
+title: "Parametric vs. Non-parametric Methods in Machine Learning"
+author: "Hun Lee (sl4836), 3/27/2022"
+geometry: margin=1.5cm
+output: pdf_document
+---
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, cache = TRUE)
+```
+
+## Introduction
+
+The goal of the project is to examine whether non-parametric prediction methods in machine learning can perform better than parametric methods when the data set does not follow the assumptions of parametric prediction models.
+
+### Data description and dictionary (binary variable - 1: yes, 0: No)
+
+The Framingham Heart Study is a long term prospective study of the etiology of cardiovascular
+disease among a population of free living subjects in the community of Framingham,
+Massachusetts. The Framingham Heart Study was a landmark study in epidemiology in that it
+was the first prospective study of cardiovascular disease and identified the concept of risk
+factors and their joint effects.
+
+**sex** : The gender of the observations (male & female).$\\$
+**age** : Age at the time of medical examination in years.$\\$
+**education** : Some high school (1), high school/GED (2), some college/vocational school (3), college (4)$\\$
+**currentSmoker**: Current cigarette smoking at the time of examinations$\\$
+**cigsPerDay**: Number of cigarettes smoked each day$\\$
+**BPmeds**: Use of Anti-hypertensive medication at exam$\\$
+**prevalentStroke**: Prevalent Stroke (0 = free of disease)$\\$
+**prevalentHyp**: Prevalent Hypertensive. Subject was defined as hypertensive if treated$\\$
+**diabetes**: Diabetic according to criteria of first exam treated$\\$
+**totChol**: Total cholesterol (mg/dL)$\\$
+**sysBP**: Systolic Blood Pressure (mmHg)$\\$
+**diaBP**: Diastolic blood pressure (mmHg)$\\$
+**BMI**: Body Mass Index, weight (kg)/height (m)^2$\\$
+**heartRate**: Heart rate (beats/minute)$\\$
+**glucose**: Blood glucose level (mg/dL)$\\$
+**TenYearCHD (outcome variable)**: The 10 year risk of coronary heart disease(CHD).
+
+Before diving into exploratory analysis and model training, missing data is omitted in this project in order to compare the model performance in two different scenarios, omitting missing data vs. imputing missing data, which will be done and reported in the upcoming final project. Because the original data set was already quite clean, not much was needed to be done for data cleaning other than omitting missing data, cleaning variable names, turning categorical variables into factors, and re-leveling the outcome variable to predict whether one would have chronic heart disease. Lastly, to measure the performance of differnet models with testing data set, the data set is divided into training and testing data set with the ratio of 8 to 2.
+
+## Exploratory analysis/Parametric Model Assumption Check
+
+From Fig.1, we can check whether each class has equal variance/covariance in the predictors among two CHD classes from covariance ellipses and box plots. It is to be observed the variance is unequal among two CHD groups for *age*, *sys_bp* and *cigs_per_day* variables. It is also to be observed that the covariance ellipse for CHD group is generally much wider than NoCHD group. The density plots in Fig.1 also shows that the continuous predictors given the outcome variable, $f(X | Y =y)$, are fairly normally distributed for *heart_rate* variable, but not to be normally distributed for *age*, *cigs_per_day*, *glucose*, and *sys_bp* variables. Another thing to note is that two CHD groups are not well dispersed by continuous predictors except *sys_bp* and *age* variables and hence they are expected to play more important roles in predicting the status of chronic heart disease than the other continuous variables. In light of the above exploratory analysis, the assumptions of normality and equality variance-covariance matrices are not met with our data. 
+
+Additionally, checking of Fig.2 for the assumptions of a logistic regression lets us see that the data does not satisfy the assumptions of homogeneity of variance and the normality of residuals. An important assumption of logistic regression is that the errors (residuals) of the model are approximately normally distributed because the model has a nonlinear transformation of the predicted values, so the degree to which observed values deviate from the predicted values is expected to vary across a range of values, with most residuals being near 0 and fewer residuals deviating far from the predicted line. Based on the these analyses, we expect parametric methods, such as Logistic regression, linear discriminant analysis (LDA), quadratic discriminant analysis (QDA), or parametric (Gaussian) Naive Bayes not to be the best methods for predicting whether one would have chronic heart disease (CHD) with our data set.
+
+Regression methods that uses regularization, such as least absolute shrinkage and selection operator (Lasso), are expected to be better methods considering it does not require assumptions like normality or equal variance-covariance matrices and our data set does not have influential outliers and there are 15 predictors (high dimensionality) among which are continuous and not highly correlated. However, Lasso is also a parametric method and hence we are not confident in that it is going to perform better than non-parametric methods. 
+
+Among categorical variables, *sex* and *education*, and *prevalent_hyp*, have a fair amount of difference of proportions among two CHD classes; hence, they may play more important roles in predicting whether one would have chronic heart disease than the rest of the categorical variables.
+
+## Models & Results
+
+To fit and train models for machine learning classifiers, all 15 predictors are used as predictors in all parametric and non-parametric models and they are all centered and scaled through data pre-processing. The parametric models for machine learning classifiers with the training set are Logistic regression, Lasso regression, parametric Naive Bayes, and LDA method and these models require distributional and parametric assumptions. For logistic regression, the assumptions of homogeneity of variance, the normality of residuals, no influential outliers, and no multicollinearity are required. For LDA method, the assumptions of equal variance-covariance matrices and conditional Normality $f(X | Y = y) \sim N$ are required. For Gaussian (parametric) Naive Bayes, the predictors associated with each response class are expected to be normally distributed with the independence assumptions between predictors. Lastly, for Lasso method, there should be no influential observations. 
+
+Unfortunately, as aforementioned, most of the assumptions of the parametric models are not met with our data set; hence, this project includes non-parametric models in order to check if indeed non-parametric models can be better methods than parametric models when the assumptions of the parametric models are violated. The non-parametric models for machine learning classifiers with the training set are multivariate adaptive regression spline (MARS), supervised principal component analysis (PCA), and non-parametric Naive Bayes method. MARS can be used to create a set of hinge functions that result in discriminant functions that are nonlinear combinations of the original predictors for classification. For supervised PCA, the eigenvectors of covariance matrix are used to find principal components and use them for dimensionality reduction. Among 15 components, 12 components cover about 95% of the variance, the first component explains 21.6% and the second 12.6% (Fig.4). Since 12 components explain the most of the variance, the supervised PCA model is fitted with these 12 components and turns out 12 components are the best number of variables with the highest estimated mean of AUC.
+
+For the models that use tuning parameters, such as Lasso, MARS, and Naive Bayes, the best tuning parameter is selected such that the highest area under the ROC curve (AUC), known as the measure of the ability of a classifier to distinguish between classes (separabiltiy), is obtained from 10-fold cross validation (repeated cross-validation did not give better result and was more time-consuming and hence 10-fold cross validation method was chosen). Lasso model chooses lambda value 0.003506 as the best tuning parameter and Naive Bayes with non-parametric model with 2 flow (Laplace Smoother) as the best tuning parameter (Fig.4). In fact, all of 0, 1, and 2 flow are the best tuning parameter because they give the same result. For MARS model, 6 prunes (nprune) are selected as the best tuning parameter and five predictors are selected. Among the five predictors, sys_bp takes the highest importance role, followed by age, glucose, cigs_per day, and sex (female). In fact, sys_bp and age were expected to play more significant roles in predicting chronic heart disease than the other variables in the previous part. Lastly, the product degree of the MARS model is 1, implying that there is no interaction in hinge functions.
+
+Note that Area under the ROC curve (AUC) is the metric used to compare the performance of the models and Fig.5 shows the cross-validated result of all the models with the training data set. Two non-parametric models, MARS and supervised PCA (in order), perform better than all the parametric models based on the result of the estimated mean of AUC from 10-fold cross validation, followed by Lasso, Logistic regression, LDA, and Naive Bayes. For the model performance with the testing data set, supervised PCA has the highest AUC, followed by Lasso, Logistic regression, MARS, LDA, and Naive Bayes (Fig.6). Considering that many assumptions of parametric models are violated with the data set, these results make sense. It is also not surprising that the cross-validated Naive Bayes method chooses the best tuning parameter from a nonparametric method with higher estimated mean value of AUC than Gaussian method (Fig.4).
+
+Besides the violation of the assumptions of the parametric models, one of the limitations in this project is the type and the number of predictors to predict whether one would have chronic heart disease. I believe the prediction result would have been better with more number of predictors associated with chronic heart disease. Another limitation is the imbalanced number of the response variable class. It is recommended to have at least one thousand observation in each class, but we only have 644 observation in CHD group and 454 observations in training CHD group. If we were to have more observations in CHD group, the prediction accuracy would be expected to be higher. Though the predictors in the data set are not the best variables, MARS, PCA, and Lasso regression are flexible enough to capture the underlying truth with appropriate tuning parameters and data pre-processing.
+
+## Conclusion
+
+For the final model selection, MARS model will be chosen for the prediction of chronic heart disease because it has the highest estimated mean of AUC from 10-fold cross validation using the training set. On the one hand, there is little discernible difference in the estimated mean of AUC between MARS (0.7350) and supervised PCA(0.7330); hence, supervised PCA model can be also considered as the final model for the prediction of chronic heart disease.
+
+Given that non-parametric methods in machine learning show the better performance over parametric methods, it is to be concluded that for non-parametric models have more flexibility by taking a large number of various functional forms and hence may have more prediction power by not being regulated by the parametric (distributional) assumptions unlike parametric methods, especially under the circumstance where those assumptions are violated. This conclusion underpinned from the Fig.8 that compares two model (LDA vs PCA) plots. The plot fitted by the supervised PCA model shows that principal component variables have two different classes of response variable observations more well dispersed and separated with more flexibility in the model compared to the plot fitted by the LDA model which shows that linear discriminant variable does not successfully have two different classes of response variable observations well dispersed (two classes are mostly overlapped). Considering that key assumptions of LDA method are violated, this result is not surprising. Thus, it is also to be concluded that parametric methods in machine learning are constrained to the specified functional forms and parametric assumptions and hence may be more prone to different features and types of data set than non-parametric methods. Among parametric models, Lasso regression performs the best. This outcome is reasonable considering Lasso regression is not constrained to much parametric assumptions, such as normality, equal covariance matrices, or independence between predictors. Thus, it is recommended to use non-parametric methods or Lasso regression method in machine learning prediction when data does not meet those three assumptions.
+
+Last but not least, the work of this project finds systolic blood pressure, age, and glucose to be important factors in predicting whether one would have chronic heart disease or not. However, it should be noted that it is likely that there are other important variables for chronic heart disease prediction which this data set does not have; hence more prediction analyses need be to done with more number of potential variables, larger number of data size, and possibly data set with more balanced classes of the outcome variable in order to make a stronger and more confident conclusion.
+
+## Reference
+
+Datasciencediving. (2017, November 3). Principal component analysis in R. Data Science Diving. https://datasciencediving.wordpress.com/2017/10/05/principal-component-analysis-in-r/ 
+
+Diagnostics for logistic regression - web.pdx.edu. (n.d.). https://web.pdx.edu/~newsomj/cdaclass/ho_diagnostics.pdf 
+
+Divyariyer. (2021, January 19). Heart disease prediction - framingham casestudy. Kaggle.Divyariyer. (2021, January 19). Heart disease prediction - framingham casestudy. Kaggle. https://www.kaggle.com/code/divyariyer/heart-disease-prediction-framingham-casestudy/data 
+
+Framingham Heart Study - biolincc.nhlbi.nih.gov. (n.d.). https://biolincc.nhlbi.nih.gov/media/teachingstudies/FHS_Teaching_Longitudinal_Data_Documentation_2021a.pdf?link_time=2022-03-25_09:22:37.141675 
+
+
+
+
+
+\newpage
+
+\centering
+
+```{r, echo = FALSE}
+library(RCurl)
+library(skimr)
+library(caret)
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+library(RColorBrewer)
+library(kableExtra)
+library(dplyr)
+library(tidymodels)
+library(AppliedPredictiveModeling)
+library(ggpubr)
+library(patchwork)
+library(mlbench)
+library(pROC)
+library(klaR)
+library(gtsummary)
+library(earth)
+library(pdp)
+library(vip)
+library(mgcViz)
+library(patchwork)
+library(gridExtra)
+library(grid)
+```
+
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%")
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis")
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+
+```{r, echo = FALSE}
+## Importing and partitioning data
+
+x <- RCurl::getURL("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
+
+data <- read.csv(text = x) %>% janitor::clean_names()
+
+data <- distinct(data) # in case there are duplicated rows
+
+set.seed(1)
+split <- initial_split(data, prop = 0.8)
+
+training_df <- 
+  split %>% 
+  training() %>%
+  na.omit() %>%
+  mutate(male = factor(male),
+         education = factor(education),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes))  %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
+           fct_relevel("NoCHD", "CHD")) %>%
+  dplyr::rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female")) %>%
+  relocate(ten_year_chd)
+
+testing_df <- 
+  split %>% testing()  %>%
+  na.omit() %>%
+  mutate(male = factor(male),
+         education = factor(education),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes)) %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD","NoCHD") %>%
+           fct_relevel("NoCHD", "CHD")) %>%
+  dplyr::rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female")) %>%
+  relocate(ten_year_chd)
+
+```
+
+## Appendix
+
+```{r, echo = FALSE, fig.width=4, fig.height=4}
+data_summary <-
+  training_df %>%
+  tbl_summary(by = ten_year_chd,
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{p}% ({n} / {N})")
+  )  %>%
+  bold_labels() %>% 
+  bold_levels() %>%
+  add_n() %>% # add column with total number of non-missing observations
+  add_p() %>% # test for a difference between groups
+  bold_labels() %>%
+  as_gt() %>%
+  gt::tab_header("Table 1: Data Summary by CHD Status") 
+```
+
+```{r}
+#data_summary
+```
+
+
+```{r, fig.width=8, fig.height=2.9}
+cor_df <-
+  training_df %>% 
+  mutate(sex = ifelse(sex == "male", 1, 0)) %>%
+  select(where(is.numeric))
+
+M <- cor(cor_df)
+
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+
+#corrplot::corrplot(M, method = "color", col=col(200),  
+#         type="upper", order = "hclust", 
+#         addCoef.col = "black",
+#         tl.col = "black", tl.srt=45, 
+#         sig.level = 0.01, insig = "blank", 
+#         diag = FALSE,
+#         number.cex = 0.5,
+#         tl.cex = 0.6)
+
+#mtext("Fig.1 Correlation plot", at = -1, line = 2.5, cex = 0.8)
+```
+
+
+### Checking the Assumptions of Parametric Models & Exploratory Analysis
+
+```{r, echo = FALSE}
+x <- training_df %>% select(where(is.numeric), -ten_year_chd)
+x1 <- x %>% select(1,2,3,4)
+x2 <- x %>% select(-1,-2,-3,-4)
+x3 <-  training_df %>% select(where(is.factor)) 
+y <- training_df$ten_year_chd
+```
+
+```{r}
+x4 <- x[,c(1,2,4,7,8)]
+x4$ten_year_chd <- training_df$ten_year_chd
+```
+
+```{r, fig.height=4}
+plot1 <- list()
+variable_names <- names(x4)
+x1 <- x %>% mutate(ten_year_chd = y)
+
+for (i in variable_names) {
+    plot1[[i]] <- ggplot(x4, 
+                        aes_string(x = "ten_year_chd", 
+                                   y = i, 
+                                   col = "ten_year_chd", 
+                                   fill = "ten_year_chd")) + 
+    geom_boxplot(alpha = 0.1) + 
+    theme(legend.position = "none") + 
+    scale_color_manual(values = c("blue", "red")) +
+    scale_fill_manual(values = c("blue", "red"))
+}
+
+plot1$ten_year_chd <- NULL
+```
+
+
+```{r}
+plot2 <- list()
+variable_names <- names(x4)
+
+for (i in variable_names) {
+    plot2[[i]] <- ggplot(x4, 
+                        aes_string(x = i, 
+                                   col = "ten_year_chd", 
+                                   fill = "ten_year_chd")) + 
+    geom_density(alpha = 0.1) + 
+    theme(legend.position = "none") + 
+    scale_color_manual(values = c("blue", "red")) +
+    scale_fill_manual(values = c("blue", "red")) 
+}
+
+plot2$ten_year_chd <- NULL
+```
+
+
+
+```{r}
+x4 <- x[,c(1,2,4,5,7,8)]
+x4$ten_year_chd <- training_df$ten_year_chd
+
+plot3 <- list()
+variable_names <- names(x4)
+
+for (i in variable_names) {
+    plot3[[i]] <- ggplot(x4, 
+                        aes_string(x = "age", 
+                                   y = i, 
+                                   col = "ten_year_chd")) + 
+    geom_point(alpha = 0.1) + 
+    stat_ellipse() + 
+    theme(legend.position = "none") + 
+    scale_color_manual(values = c("blue", "red")) 
+    
+}
+
+plot3$age <- NULL
+plot3$ten_year_chd <- NULL
+
+```
+
+
+### Fig.1 Checking the Assumption of Conditional Normality $f(X | Y = y) \sim N$ and Equal Variance-Covariance
+
+```{r, fig.width=8}
+do.call(gridExtra::grid.arrange, c(plot2,plot3,plot1, ncol = 5))
+```
+
+
+
+```{r}
+#x1 <- x %>% select(1,2,3,4)
+#x2 <- x %>% select(-1,-2,-3,-4)
+#x3 <- x %>% select(1,2,4,7,8)
+```
+
+```{r, fig.height=4, fig.width=8}
+#x3 <- x %>% select(1,2,4,7,8)
+#heplots::covEllipses(x3, 
+#                     y, 
+#                     fill = TRUE, 
+#                     pooled = FALSE, 
+#                     variables = c(1:4, 5), 
+#                     fill.alpha = 0.1,
+#                     center.cex = 0.3)
+```
+
+
+```{r, fig.height=4, fig.width=7}
+### Fig.4 Checking the Assumption of Conditional Normality $f(X | Y = y) \sim N$ 
+#ransparentTheme(trans = .9)
+#featurePlot(x, y,
+#            plot = "density", 
+#            scales = list(x = list(relation = "free"), 
+#                          y = list(relation = "free")), 
+#            adjust = 1.5, 
+#            pch = "|", 
+#            layout = c(4, 2), 
+#            auto.key = list(ncols = 4))
+```
+
+```{r, echo = FALSE, fig.width=7, fig.height=5}
+# Categorical variable exploratory analysis 
+
+#x3 <- training_df %>% group_by(ten_year_chd) %>% mutate(count = 1)
+
+#p1 <- ggbarplot(x3, "ten_year_chd", "count", color = "sex", palette = "Paired")
+#p2 <- ggbarplot(x3, "ten_year_chd", "count", color = "education", palette = "Paired")
+#p3 <- ggbarplot(x3, "ten_year_chd", "count", color = "current_smoker", palette = "Paired")
+#p4 <- ggbarplot(x3, "ten_year_chd", "count", color = "bp_meds", palette = "Paired")
+#p5 <- ggbarplot(x3, "ten_year_chd", "count", color = "diabetes", 
+#                palette = "Paired", lab.size = -1)
+
+#p6 <- ggbarplot(x3, "ten_year_chd", "count", color = "prevalent_stroke", 
+#                palette = "Paired", lab.size = 0.1)
+#p7 <- ggbarplot(x3, "ten_year_chd", "count", color = "prevalent_hyp", 
+#                palette = "Paired", lab.size = 0.1)
+
+#(p2 + p3) / (p1 + p4 + p5) / (p6 + p7)
+```
+
+### Fig.2 Checking the Assumptions of Homogeneity of Variance and Normality of Residuals
+
+```{r, fig.height=3}
+glm_fit <- glm(ten_year_chd ~., data = training_df, family = "binomial")
+performance::check_model(glm_fit, check = c("homogeneity", "qq"))
+```
+
+
+```{r}
+#p <- predict(glm_fit, type = "response")
+
+#training_df %>%
+#  mutate(log_odd = log(p/(1 - p))) %>%
+#  select(where(is.numeric)) %>%
+#  gather(key = "predictors", value = "values", -log_odd) %>%
+#  ggplot(aes(log_odd, values)) +
+#  geom_point(size = 0.3, alpha = 0.3) +
+#  geom_smooth(method = "loess", se = FALSE) + 
+#  facet_wrap(~predictors, scales = "free_y")
+  
+```
+
+
+
+
+```{r}
+## LDA
+lda_fit <- MASS::lda(ten_year_chd~., data = training_df)
+
+lda_plot_df <- cbind(training_df, predict(lda_fit)$x)
+```
+
+
+
+```{r}
+## Logistic
+tr_ctr <- trainControl(method = "cv",
+                       number = 10,
+                       summaryFunction = twoClassSummary,
+                       classProbs = TRUE)
+
+set.seed(6)
+
+model.logistic <- train(ten_year_chd~.,
+                   data = training_df,
+                   preProcess = c("center", "scale"),
+                   method = "glm",
+                   metric = "ROC",
+                   trControl = tr_ctr)
+```
+
+
+```{r}
+## Lasso
+glmnGrid <- expand.grid(.alpha = 1,
+                        .lambda = exp(seq(-15, -3, length = 200)))
+set.seed(6)
+cl <- parallel::makePSOCKcluster(6)
+doParallel::registerDoParallel(cl)
+#showConnections()
+
+model.lasso <- train(ten_year_chd~.,
+                     data = training_df,
+                     preProcess = c("center", "scale"),
+                     method = "glmnet",
+                     tuneGrid = glmnGrid,
+                     metric = "ROC",
+                     trControl = tr_ctr)
+
+ParallelLogger::stopCluster(cl)
+#showConnections()
+```
+
+
+```{r}
+result_df <- model.lasso[4] %>% data.frame()
+
+p_lasso_1 <-
+  result_df %>%
+  mutate(best_lambda = model.lasso$bestTune$lambda) %>%
+  ggplot(aes(x = results.lambda, y = results.ROC)) +
+  geom_point(color = "#6b0084", alpha = 0.7) +
+  geom_point(aes(best_lambda, max(results.ROC)), size = 3, shape = 5, color = "purple") +
+  geom_line() +
+  geom_line(aes(best_lambda), color = "red", alpha = 0.5) +
+  labs(title = "Lasso", y = "AUC (10-fold CV)", x = "Tuning parameter (lambda)") + 
+  annotate("text",x = 0.003506046, y = 0.737, label = "0.0035") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+## MARS
+set.seed(6)
+cl <- parallel::makePSOCKcluster(6)
+doParallel::registerDoParallel(cl)
+#showConnections()
+
+model.mars <- train(ten_year_chd~.,
+                    data = training_df,
+                    preProcess = c("center", "scale"),
+                    method = "earth",
+                    tuneGrid = expand.grid(degree = 1:3, 
+                                           nprune = 2:35),
+                    metric = "ROC",
+                    trControl = tr_ctr)
+
+ParallelLogger::stopCluster(cl)
+#showConnections()
+```
+
+
+```{r}
+result_df <- model.mars[4] %>% data.frame()
+
+p_mars <-
+  result_df %>%
+  mutate(best_prune = model.mars$bestTune$nprune,
+         results.degree = as.factor(results.degree)) %>%
+  ggplot(aes(x = results.nprune, y = results.ROC, 
+             group = results.degree, color = results.degree)) +
+  geom_point() +
+  geom_point(aes(best_prune, max(results.ROC)), size = 3, shape = 5, color = "purple") +
+  geom_line() +
+  labs(title = "MARS", y = "AUC (10-fold CV)", x = "Tuning parameter (nprune)") +
+  annotate("text",x = 6, y = 0.75, label = "6") +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom") +
+  labs(color = "Product Degree")
+```
+
+
+```{r}
+## LDA
+set.seed(6)
+cl <- parallel::makePSOCKcluster(6)
+doParallel::registerDoParallel(cl)
+#showConnections()
+model.lda <- train(ten_year_chd~.,
+                   data = training_df,
+                   preProcess = c("center", "scale"),
+                   method = "lda",
+                   metric = "ROC",
+                   trControl = tr_ctr)
+
+ParallelLogger::stopCluster(cl)
+#showConnections()
+```
+
+
+```{r}
+## QDA
+#set.seed(6)
+#cl <- parallel::makePSOCKcluster(6)
+#doParallel::registerDoParallel(cl)
+#showConnections()
+#model.qda <- train(ten_year_chd~.,
+#                   data = training_df,
+#                   preProcess = c("center", "scale"),
+#                   method = "qda",
+#                   metric = "ROC",
+#                   trControl = tr_ctr)
+
+#ParallelLogger::stopCluster(cl)
+#showConnections()
+```
+
+```{r}
+pca_df <-
+  training_df %>%
+  mutate(sex = ifelse(sex == "male", 1, 0)) %>%
+  dplyr::mutate(across(where(is.factor), as.numeric))
+## Supervised PCA
+pca <- stats::prcomp(pca_df %>% select(-ten_year_chd), scale = T, center = T)
+#psych::pairs.panels(pca$rotation)
+#biplot(pca)
+#summary(pca)
+```
+
+
+```{r}
+g1 <- ggbiplot::ggbiplot(pca, obs.scale = 0.5, var.scale = 2,
+              groups = relevel(training_df$ten_year_chd, "CHD", "NoCHD"), 
+              ellipse = TRUE, circle = TRUE, alpha = 0.25)
+g1 <- g1 + scale_color_discrete(name = "(CHD, NoCHD)")
+g_plot <- g1 + theme(legend.direction = 'horizontal', legend.position = 'bottom', 
+                    legend.text = element_text(size = 0.1))
+```
+
+
+
+```{r}
+##Supervised PCA
+set.seed(6)
+cl <- parallel::makePSOCKcluster(6)
+doParallel::registerDoParallel(cl)
+#showConnections()
+
+#Selecting variables that explain variance up to 95% (dimension reduction from 15 to 12)
+pc_data <- data.frame(ten_year_chd = training_df$ten_year_chd, pca$x[,1:12])
+
+model.super.pca <- 
+  train(ten_year_chd~.,
+        data = pc_data,
+        preProcess = c("center", "scale"),
+        method = "glm",
+        metric = "ROC",
+        trControl = tr_ctr)
+ParallelLogger::stopCluster(cl)
+#showConnections()
+```
+
+
+```{r}
+## Naive Bayes
+nbGrid <- expand.grid(usekernel = c(FALSE,TRUE),
+                      fL = 0:2,
+                      adjust = seq(0, 4, by = .2))
+set.seed(6)
+cl <- parallel::makePSOCKcluster(6)
+doParallel::registerDoParallel(cl)
+#showConnections()
+
+model.nb <- train(ten_year_chd~.,
+                  data = training_df,
+                  method = "nb",
+                  tuneGrid = nbGrid,
+                  preProcess = c("center", "scale"),
+                  metric = "ROC",
+                  trControl = tr_ctr)
+
+ParallelLogger::stopCluster(cl)
+#showConnections()
+```
+
+
+```{r}
+nb_df <-
+  model.nb[4] %>% 
+  data.frame() %>% janitor::clean_names()
+
+nb_df$results_usekernel <- as.factor(nb_df$results_usekernel)
+
+p_NB <-
+  (nb_df %>% 
+  na.omit() %>%
+  mutate(results_usekernel = ifelse(results_usekernel == FALSE, "Gaussian", "Nonparametric")) %>%
+  dplyr::mutate(across(where(is.integer), as.factor)) %>%
+  mutate(best_adjust = model.nb$bestTune$adjust) %>%
+  ggplot(aes(results_adjust, results_roc, group = results_f_l, color = results_f_l)) + 
+  geom_point(position=position_jitter(h=0.0003, w=0.0003),
+             shape = 21, alpha = 0.7, size = 3) + 
+  geom_point(aes(best_adjust, max(results_roc)), size = 3, shape = 5, color = "purple") +
+  geom_line() +
+  scale_colour_manual(values=(c("black", "lightblue", "#6b0084"))) +
+  facet_wrap(~results_usekernel) +
+  labs(title = "Naive Bayes", 
+       x = "Tuning Parameter (adjust)", y = "AUC (10-FOLD CV") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5, face = "bold"), legend.position = "bottom") +
+  labs(color = "Flow (Laplace Smoother)"))
+```
+
+
+```{r, fig.width=12, fig.height=8}
+(p_lasso_1 + p_mars)/p_NB + plot_annotation(title = "Fig.3 Model Tuning Parameter",
+                          theme = theme(plot.title = element_text(hjust = 0.5, 
+                                                                  face = "bold", size = 20))) 
+```
+
+```{r, fig.width=7, fig.height=4}
+### Fig.7 MARS Model Variance Importance Plot(VIP)
+
+#p4 <- vip(model.mars$finalModel) 
+
+#p4 + labs(title = "6 Selected Terms and 5 Selected Predictors") + 
+#  theme(plot.title = element_text(size = 10, hjust = 0.5, face = "bold"))
+
+```
+
+
+```{r, fig.width=10}
+lda_plot <-
+  ggplot(lda_plot_df, aes(LD1)) +
+  geom_histogram(aes(color = ten_year_chd), alpha = 0.7, bins = 30) + xlim(-4,4) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
+
+lda_plot + g_plot + plot_annotation(title = "Fig.4 LDA Plot vs. PCA Plot ",
+                          theme = theme(plot.title = element_text(hjust = 0.5, 
+                                                                  face = "bold", size = 16))) 
+
+```
+
+```{r}
+### Fig.9 Naive Bayes Density Plots
+#![](NB.jpg){width=710px}
+```
+
+
+
+```{r, fig.height=9}
+#par(mfrow = c(4,4))
+#plot(model.nb$finalModel, cex.lab = 2.2, cex.axis = 2, cex.main = 3, col.lab = "blue", pch = 20)
+```
+
+
+
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+resample <- resamples(list(Logistic = model.logistic,
+                      Lasso = model.lasso,
+                      MARS = model.mars,
+                      Supervised_PCA = model.super.pca,
+                      LDA = model.lda,
+                      Naive_Bayes = model.nb
+                      ), metric = "ROC")
+
+result <- summary(resample)
+
+
+ROC_df <-  
+  tibble(Logistic = result$values$`Logistic~ROC`,
+         Lasso = result$values$`Lasso~ROC`,
+         MARS = result$values$`MARS~ROC`,
+         Supervised_PCA = result$values$`Supervised_PCA~ROC`,
+         LDA = result$values$`LDA~ROC`,
+         Naive_Bayes = result$values$`Naive_Bayes~ROC`) %>% 
+  pivot_longer(Logistic:Naive_Bayes, names_to = "method", values_to = "values")
+  
+table_result <-
+  result$statistics$ROC[,-7] %>% 
+  data.frame() %>%
+  round(digits = 4) %>%
+  rownames_to_column() %>%
+  dplyr::rename(Models = rowname) %>%
+  arrange(desc(Mean)) %>%
+  kbl(caption = "ROC from 10-fold CV estimate") %>%
+  kable_classic("striped", full_width = F , html_font = "Cambria",
+                latex_options = "HOLD_position")
+
+plot_result <-
+  ROC_df %>% 
+  ggplot(aes(x = reorder(method, values), values, color = method)) + 
+  geom_boxplot(fatten = NULL, alpha = 0.3) +
+  stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid") + 
+  coord_flip() +
+  labs(title = "Fig.5 Distribution of the Estimated AUC for six models from 10-fold CV", 
+       subtitle = "Middle box line represents mean of AUC",
+       x = "Model", y = "Area under the ROC curve",
+       caption = "Mean: (MARS, 0.7350), (PCA, 0.7330), (Lasso, 0.7326), (Logistic, 0.7312), (LDA, 0.7268), (NB, 0.7206)") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(size = 7, hjust = 0.5),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+
+
+```{r}
+t1 <-
+  result$statistics$ROC[,-7] %>% 
+  data.frame() %>%
+  round(digits = 4) %>%
+  rownames_to_column() %>%
+  dplyr::rename(Models = rowname) %>%
+  arrange(desc(Mean))
+
+mytheme <- gridExtra::ttheme_minimal(
+    core = list(fg_params = list(cex = 0.6)),
+    colhead = list(fg_params = list(cex = 0.8)),
+    rowhead = list(fg_params = list(cex = 1)))
+
+t2 <- tableGrob(t1, rows = NULL, theme = mytheme)
+
+separators <- replicate(ncol(t2) - 2,
+                     grid::segmentsGrob(x1 = unit(0, "npc"), gp=grid::gpar(lty=2)),
+                     simplify=FALSE)
+
+table_result <- gtable::gtable_add_grob(t2, grobs = separators, t = 2, b = nrow(t2), 
+                                        l = seq_len(ncol(t2)-2)+2)
+
+grid.arrange(plot_result,
+             top = grid::textGrob(expression(bold("")), 
+                                     gp = grid::gpar(fontsize = 10,font = 12)))
+```
+
+```{r, fig.width=10, fig.height=5}
+test_pca <- tbl_df(predict(pca, newdata = testing_df %>%
+                            mutate(sex = ifelse(sex == "male", 1, 0)) %>%
+                            mutate(ten_year_chd = ifelse(ten_year_chd == "CHD", 1, 0))  %>%
+                            dplyr::mutate(across(where(is.factor), as.numeric))))
+
+glm.pred <- predict(model.super.pca, newdata = test_pca, type = "prob")[,2]
+roc.super.pca <- roc(testing_df$ten_year_chd, glm.pred)
+
+glm.pred <- predict(model.mars, newdata = testing_df, type = "prob")[,2]
+roc.mars <- roc(testing_df$ten_year_chd, glm.pred)
+
+glm.pred <- predict(model.lda, newdata = testing_df, type = "prob")[,2]
+roc.lda <- roc(testing_df$ten_year_chd, glm.pred)
+
+glm.pred <- predict(model.nb, newdata = testing_df, type = "prob")[,2]
+roc.nb <- roc(testing_df$ten_year_chd, glm.pred)
+
+
+glm.pred <- predict(model.lasso, newdata = testing_df, type = "prob")[,2]
+roc.lasso <- roc(testing_df$ten_year_chd, glm.pred)
+
+glm.pred <- predict(model.logistic, newdata = testing_df, type = "prob")[,2]
+roc.logistic <- roc(testing_df$ten_year_chd, glm.pred)
+
+
+plot(roc.mars, col = 6, legacy.axes = TRUE, main = "Fig.6 AUC-ROC Curve Performance on the Test Set")
+plot(roc.super.pca, col = 5, add = TRUE)
+plot(roc.lasso, col = 4, add = TRUE)
+plot(roc.lda, col = 3, add = TRUE)
+plot(roc.nb, col = 2, add = TRUE)
+plot(roc.logistic, col = 8, add = TRUE)
+
+auc <- sort(c(roc.mars$auc[1], roc.super.pca$auc[1], roc.lasso$auc[1], 
+         roc.lda$auc[1], roc.nb$auc[1], roc.logistic$auc[1]), decreasing = TRUE)
+
+modelNames <- c("Supervised PCA","Lasso", "Logistic", "MARS", "LDA", "Naive Bayes")
+legend("bottomright", legend = paste0(modelNames, ": ", round(auc,4)),
+       col = c(6:2,8), lwd = 2)
+```
+
+
