@@ -1,0 +1,96 @@
+---
+title: "Missing Data Imputation"
+author: "Hun"
+date: '2022-04-28'
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, cache = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(mice)
+library(visdat)
+library(VIM)
+library(patchwork)
+```
+
+```{r}
+x <- RCurl::getURL("https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv")
+
+data <- read.csv(text = x) %>% janitor::clean_names()
+```
+
+
+## Visualizing missing data
+
+```{r}
+# Visualizing missing data
+vis_miss(data)
+```
+
+## Patterns of missing data
+
+```{r}
+aggr_plot <- aggr(data, col=c('skyblue','orange'), numbers=TRUE, sortVars=TRUE, labels=names(data), 
+                  cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+
+```
+
+\newpage  
+### Checking the assumption of missing completely at random (MCAR)
+
+If our assumption of MCAR data is correct, then we expect the red and blue box plots to be very similar.
+
+```{r, fig.height=4, fig.width=5}
+# If our assumption of MCAR data is correct, then we expect the red and blue box plots to be very similar.
+marginplot(data[c(15,2)])
+```
+
+
+```{r, fig.height=4, fig.width=5}
+
+marginplot(data[c(15,11)])
+```
+
+
+### Selecting variables to impute data
+
+I selected *glucose* and *tot_chol* because they both are continuous and have similar patterns.
+
+```{r}
+selected_varaible <- 
+  data %>% 
+  dplyr::select(-education, -bp_meds, -cigs_per_day, -bmi, -heart_rate)
+```
+
+### Using Predictive Mean Matching (PMM) to impute missing data
+
+```{r}
+tempData <- mice(selected_varaible, m = 5, maxit = 5, meth = 'pmm',seed = 7)
+
+```
+
+
+```{r}
+completedData <- complete(tempData,1)
+```
+
+```{r, fig.height=4, fig.width=8}
+xyplot(tempData, glucose ~ sys_bp + age + dia_bp,pch=18,cex=1, 
+       main = "Red: imputed glucose vs. Blue: observed glucose")
+```
+
+
+```{r, fig.height=4, fig.width=8}
+xyplot(tempData, tot_chol ~ sys_bp + age + dia_bp,pch=18,cex=1, 
+       main = "Red: imputed tot_chol vs. Blue: observed tot_chol")
+```
+
+```{r}
+densityplot(tempData, main =  "Red: the imputed vs. Blue: the observed")
+```
+
