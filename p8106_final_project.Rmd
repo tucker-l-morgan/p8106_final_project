@@ -238,6 +238,21 @@ confusionMatrix(data = rf_pred_test_class,
                 reference = y_test)
 ```
 
+```{r rf variable importance}
+set.seed(2022)
+
+vp_ranger = ranger::ranger(ten_year_chd ~ .,
+       training_df,
+       mtry = rf_fit$bestTune[[1]],
+       splitrule = "gini",
+       min.node.size = rf_fit$bestTune[[3]],
+       importance = "impurity")
+
+barplot(sort(ranger::importance(vp_ranger), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(16))
+```
+
 ```{r boosting}
 # Boosting
 set.seed(2022)
@@ -280,6 +295,21 @@ resamp = resamples(list(random_forest = rf_fit,
 summary(resamp)
 
 bwplot(resamp, layout = c(3, 1))
+```
+
+```{r auc and roc}
+roc_rf = roc(y_test, rf_pred_test_probs)
+roc_boost = roc(y_test, boost_pred_test_probs)
+
+plot(roc_rf, col = 1)
+plot(roc_boost, add = TRUE, col = 2)
+
+auc = c(roc_rf$auc[1], roc_boost$auc[1])
+
+model_names = c("Random Forest", "Adaboost")
+
+legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
+       col = 1:2, lwd = 2)
 ```
 
 ## Appendix
