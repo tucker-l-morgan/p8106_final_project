@@ -39,6 +39,7 @@ library(patchwork)
 library(Hmisc)
 library(groupdata2)
 library(reshape)
+library(recipes)
 
 knitr::opts_chunk$set(
   echo = TRUE,
@@ -136,6 +137,269 @@ missing_data_viz = cleaned_df %>%
   vis_miss()
 ```
 
+## New Models
+
+```{r, include = FALSE}
+set.seed(2022)
+
+# Training/testing partition
+index_train = createDataPartition(cleaned_df$ten_year_chd, 
+                                  p = 0.8,
+                                  list = FALSE)
+
+training_df = cleaned_df[index_train, ]
+testing_df = cleaned_df[-index_train, ]
+
+# Model matrices
+x_train = model.matrix(ten_year_chd ~ ., training_df)[, -1]
+x_test = model.matrix(ten_year_chd ~ ., testing_df)[, -1]
+y_train = training_df$ten_year_chd
+y_test = testing_df$ten_year_chd
+
+# Train control with 10-fold cross-validation repeated 5 times
+ctrl = trainControl(method = "repeatedcv",
+                    repeats = 5,
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE)
+```
+
+```{r}
+# Data frames with no imputation, missing values dropped
+dropped_df = cleaned_df %>% 
+  na.omit()
+
+set.seed(2022)
+
+# Training/testing partition
+index_train_dropped = createDataPartition(dropped_df$ten_year_chd, 
+                                  p = 0.8,
+                                  list = FALSE)
+
+training_df_dropped = dropped_df[index_train_dropped, ]
+testing_df_dropped = dropped_df[-index_train_dropped, ]
+
+# Model matrices
+x_train = model.matrix(ten_year_chd ~ ., training_df_dropped)[, -1]
+x_test = model.matrix(ten_year_chd ~ ., testing_df_dropped)[, -1]
+y_train = training_df_dropped$ten_year_chd
+y_test = testing_df_dropped$ten_year_chd
+```
+
+```{r preprocessing with recipe}
+# Preprocessing and feature engineering with recipe (including imputation)
+# Note: assuming data is MAR
+
+# recipe of preprocessing steps
+preprocess_recipe = recipe(ten_year_chd ~ ., data = training_df) %>%
+  step_impute_knn(all_predictors(), neighbors = 5) %>%  # KNN imputation based on 5 nearest neighbors
+  step_BoxCox(all_numeric_predictors()) %>% # transform predictors
+  step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
+  step_scale(all_numeric_predictors())
+```
+
+```{r random forest with imputation}
+# Random forest with imputation
+set.seed(2022)
+
+# RF grid
+rf_grid = expand.grid(mtry = 1:8,
+                       splitrule = "gini",
+                       min.node.size = seq(from = 2, to = 10, by = 2))
+
+# Train random forest model
+rf_fit = train(preprocess_recipe,
+              data = training_df,
+              method = "ranger",
+              tuneGrid = rf_grid,
+              metric = "ROC",
+              trControl = ctrl)
+
+ggplot(rf_fit, highlight = TRUE)
+
+# Performance on test data
+
+# Class probabilities
+rf_pred_test_probs = predict(rf_fit, newdata = testing_df, type = "prob")[,1]
+
+rf_pred_test_class = predict(rf_fit, newdata = testing_df, type = "raw")
+
+# Confusion matrix
+# Performs identically to NIR on test data :(
+confusionMatrix(data = rf_pred_test_class,
+                reference = y_test)
+```
+
+```{r rf variable importance}
+set.seed(2022)
+
+# ZK: Appears not to work after preprocessing that includes imputation?
+vp_ranger = ranger::ranger(ten_year_chd ~ .,
+       training_df,
+       mtry = rf_fit$bestTune[[1]],
+       splitrule = "gini",
+       min.node.size = rf_fit$bestTune[[3]],
+       importance = "impurity")
+
+barplot(sort(ranger::importance(vp_ranger), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(16))
+```
+
+```{r boosting with imputation}
+# Boosting with imputation
+set.seed(2022)
+
+# Grid search for adaboost
+adaboost_grid = expand.grid(n.trees = c(2000,3000,4000,5000),
+                         interaction.depth = 1:6,
+                         shrinkage = c(0.0005,0.001,0.002),
+                         n.minobsinnode = 1)
+
+# Train boosting model
+boost_fit = train(preprocess_recipe,
+                  data = training_df,
+                  tuneGrid = adaboost_grid,
+                  trControl = ctrl,
+                  method = "gbm",
+                  distribution = "adaboost",
+                  metric = "ROC",
+                  verbose = FALSE)
+
+ggplot(boost_fit, highlight = TRUE)
+
+# Performance on test data
+
+# Class probabilities
+boost_pred_test_probs = predict(boost_fit, newdata = testing_df, type = "prob")[,1]
+
+boost_pred_test_class = predict(boost_fit, newdata = testing_df, type = "raw")
+
+# Confusion matrix
+confusionMatrix(data = boost_pred_test_class,
+                reference = y_test)
+```
+
+```{r random forest without imputation}
+# Random forest without imputation
+set.seed(2022)
+
+# RF grid
+rf_grid = expand.grid(mtry = 1:8,
+                       splitrule = "gini",
+                       min.node.size = seq(from = 2, to = 10, by = 2))
+
+# Train random forest model
+rf_fit_without_impute = train(ten_year_chd ~ .,
+                              data = training_df_dropped,
+                              method = "ranger",
+                              tuneGrid = rf_grid,
+                              metric = "ROC",
+                              trControl = ctrl,
+                              preProcess = c("center", "scale", "BoxCox"))
+```
+
+```{r boosting without imputation}
+# Boosting without imputation
+set.seed(2022)
+
+# Grid search for adaboost
+adaboost_grid = expand.grid(n.trees = c(2000,3000,4000,5000),
+                         interaction.depth = 1:6,
+                         shrinkage = c(0.0005,0.001,0.002),
+                         n.minobsinnode = 1)
+
+# Train boosting model
+boost_fit_without_impute = train(ten_year_chd ~ .,
+                                data = training_df_dropped, 
+                                tuneGrid = adaboost_grid,
+                                trControl = ctrl,
+                                method = "gbm",
+                                distribution = "adaboost",
+                                metric = "ROC",
+                                verbose = FALSE,
+                                preProcess = c("center", "scale", "BoxCox"))
+```
+
+```{r resampling train results}
+resamp = resamples(list(random_forest_impute = rf_fit, 
+                         adaboost_impute = boost_fit,
+                        random_forest_no_impute = rf_fit_without_impute,
+                        boost_no_impute = boost_fit_without_impute))
+summary(resamp)
+
+bwplot(resamp, layout = c(3, 1))
+```
+
+```{r auc and roc}
+roc_rf_impute = roc(y_test, rf_pred_test_probs)
+roc_boost_impute = roc(y_test, boost_pred_test_probs)
+roc_rf_no_impute = roc(y_test, rf_pred_test_probs_no_impute)
+roc_boost_no_impute = roc(y_test, boost_pred_test_probs_no_impute)
+
+plot(roc_rf, col = 1)
+plot(roc_boost, add = TRUE, col = 2)
+plot(roc_rf_no_impute, add = TRUE, col = 3)
+plot(roc_boost_no_impute, add = TRUE, col = 4)
+
+auc = c(roc_rf$auc[1], roc_boost$auc[1], roc_rf_no_impute$auc[1], roc_boost_no_impute$auc[1])
+
+model_names = c("Random Forest w/ Impute", "Adaboost w/ Impute", "Random Forest w/o Impute", "Adaboost w/o Impute")
+
+legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
+       col = 1:2, lwd = 2)
+```
+
+```{r RF with bagged impute}
+set.seed(2022)
+
+# Just for fun: let's try random forest with bagged imputation
+preprocess_recipe_bagged = recipe(ten_year_chd ~ ., data = training_df) %>%
+  step_impute_bag(all_predictors()) %>%  # Bagged imputation 
+  step_BoxCox(all_numeric_predictors()) %>% # transform predictors
+  step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
+  step_scale(all_numeric_predictors())
+
+rf_fit = train(preprocess_recipe_bagged,
+              data = training_df,
+              method = "ranger",
+              tuneGrid = rf_grid,
+              metric = "ROC",
+              trControl = ctrl)
+```
+
+
+## Appendix
+
+```{r imputing w mice}
+# Impute all missing values using MICE
+library(mice)
+
+# 50 iterations using predictive mean matching
+# TM: changed object name because output is not a dataframe
+# TM: I also think this method is most common for inferential settings where inference is performed with each of the 5 imputed datasets, but I don't think we care to do this; see: https://bookdown.org/max/FES/imputation-methods.html
+# the above resource also recommends imputing during the resampling process so that imputation variability is captured, but I don't think Yifei mentioned anything about this? So I think we go with bagging imputation at the very start
+imputed_mids = mice(all_df, 
+                  m = 5,
+                  maxit = 50,
+                  method = "pmm",
+                  seed = 100)
+
+summary(imputed_mids)
+# this function outputs the completed dataset from the mids object
+completed_df <- complete(imputed_mids)
+skimr::skim(completed_df)
+```
+
+```{r imputing w Hmisc}
+# Impute using Hmisc
+# Note: assumes linearity in the variables being predicted
+library(Hmisc)
+
+# Example of imputing glucose column using median value
+# TM: the weakest option IMO
+all_df$glucose = with(all_df, impute(glucose, median))
+```
+
 ```{r correlation plots, include = FALSE}
 # We should consider imputing for glucose only given highest correlation of these 4 missing variables with ten_year_chd, as well as much higher missingness rate
 # Beyond that, drop other missing rows
@@ -179,32 +443,6 @@ final_df = cleaned_df %>%
 # Should we impute glucose based on diabetes data only, or also other vars?
 ```
 
-## New Models
-
-```{r, include = FALSE}
-set.seed(2022)
-
-# Training/testing partition
-index_train = createDataPartition(final_df$ten_year_chd, 
-                                  p = 0.8,
-                                  list = FALSE)
-
-training_df = final_df[index_train, ]
-testing_df = final_df[-index_train, ]
-
-# Model matrices
-x_train = model.matrix(ten_year_chd ~ . , training_df)[, -1]
-x_test = model.matrix(ten_year_chd ~ ., testing_df)[, -1]
-y_train = training_df$ten_year_chd
-y_test = testing_df$ten_year_chd
-
-# Train control with 10-fold cross-validation repeated 5 times
-ctrl = trainControl(method = "repeatedcv",
-                    repeats = 5,
-                    summaryFunction = twoClassSummary,
-                    classProbs = TRUE)
-```
-
 ```{r random forest}
 # Random forest
 set.seed(2022)
@@ -236,21 +474,6 @@ rf_pred_test_class = predict(rf_fit, newdata = x_test, type = "raw")
 # Performs identically to NIR on test data :(
 confusionMatrix(data = rf_pred_test_class,
                 reference = y_test)
-```
-
-```{r rf variable importance}
-set.seed(2022)
-
-vp_ranger = ranger::ranger(ten_year_chd ~ .,
-       training_df,
-       mtry = rf_fit$bestTune[[1]],
-       splitrule = "gini",
-       min.node.size = rf_fit$bestTune[[3]],
-       importance = "impurity")
-
-barplot(sort(ranger::importance(vp_ranger), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(16))
 ```
 
 ```{r boosting}
@@ -287,59 +510,4 @@ boost_pred_test_class = predict(boost_fit, newdata = x_test, type = "raw")
 # Performs 0.001 better than NIR (p-value Acc > NIR of 0.485, so not statistically significant different from NIR on test data)
 confusionMatrix(data = boost_pred_test_class,
                 reference = y_test)
-```
-
-```{r resampling train results}
-resamp = resamples(list(random_forest = rf_fit, 
-                         adaboost = boost_fit))
-summary(resamp)
-
-bwplot(resamp, layout = c(3, 1))
-```
-
-```{r auc and roc}
-roc_rf = roc(y_test, rf_pred_test_probs)
-roc_boost = roc(y_test, boost_pred_test_probs)
-
-plot(roc_rf, col = 1)
-plot(roc_boost, add = TRUE, col = 2)
-
-auc = c(roc_rf$auc[1], roc_boost$auc[1])
-
-model_names = c("Random Forest", "Adaboost")
-
-legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
-       col = 1:2, lwd = 2)
-```
-
-## Appendix
-
-```{r imputing w mice}
-# Impute all missing values using MICE
-library(mice)
-
-# 50 iterations using predictive mean matching
-# TM: changed object name because output is not a dataframe
-# TM: I also think this method is most common for inferential settings where inference is performed with each of the 5 imputed datasets, but I don't think we care to do this; see: https://bookdown.org/max/FES/imputation-methods.html
-# the above resource also recommends imputing during the resampling process so that imputation variability is captured, but I don't think Yifei mentioned anything about this? So I think we go with bagging imputation at the very start
-imputed_mids = mice(all_df, 
-                  m = 5,
-                  maxit = 50,
-                  method = "pmm",
-                  seed = 100)
-
-summary(imputed_mids)
-# this function outputs the completed dataset from the mids object
-completed_df <- complete(imputed_mids)
-skimr::skim(completed_df)
-```
-
-```{r imputing w Hmisc}
-# Impute using Hmisc
-# Note: assumes linearity in the variables being predicted
-library(Hmisc)
-
-# Example of imputing glucose column using median value
-# TM: the weakest option IMO
-all_df$glucose = with(all_df, impute(glucose, median))
 ```
