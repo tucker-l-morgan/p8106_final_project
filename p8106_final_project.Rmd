@@ -191,7 +191,7 @@ y_test = testing_df_dropped$ten_year_chd
 
 # recipe of preprocessing steps
 preprocess_recipe = recipe(ten_year_chd ~ ., data = training_df) %>%
-  step_impute_knn(all_predictors(), neighbors = 5) %>%  # KNN imputation based on 5 nearest neighbors
+  step_impute_knn(all_predictors(), neighbors = 5) %>%  # KNN imputation based on 5 nearest neighbors; open question: can this k neighbors be optimized with xval?
   step_BoxCox(all_numeric_predictors()) %>% # transform predictors
   step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
   step_scale(all_numeric_predictors())
@@ -320,17 +320,37 @@ boost_fit_without_impute = train(ten_year_chd ~ .,
                                 preProcess = c("center", "scale", "BoxCox"))
 ```
 
+```{r RF with bagged impute}
+set.seed(2022)
+
+# Just for fun: let's try random forest with bagged imputation
+preprocess_recipe_bagged = recipe(ten_year_chd ~ ., data = training_df) %>%
+  step_impute_bag(all_predictors()) %>%  # Bagged imputation 
+  step_BoxCox(all_numeric_predictors()) %>% # transform predictors
+  step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
+  step_scale(all_numeric_predictors())
+
+rf_fit_bagged = train(preprocess_recipe_bagged,
+              data = training_df,
+              method = "ranger",
+              tuneGrid = rf_grid,
+              metric = "ROC",
+              trControl = ctrl)
+```
+
 ```{r resampling train results}
-resamp = resamples(list(random_forest_impute = rf_fit, 
-                         adaboost_impute = boost_fit,
+resamp = resamples(list(random_forest_knn_impute = rf_fit, 
+                         adaboost_knn_impute = boost_fit,
                         random_forest_no_impute = rf_fit_without_impute,
-                        boost_no_impute = boost_fit_without_impute))
+                        boost_no_impute = boost_fit_without_impute,
+                        random_forest_bag_impute = rf_fit_bagged))
 summary(resamp)
 
 bwplot(resamp, layout = c(3, 1))
 ```
 
-```{r auc and roc}
+```{r auc and roc testing}
+# ROC curves for fitted models applied to testing data
 roc_rf_impute = roc(y_test, rf_pred_test_probs)
 roc_boost_impute = roc(y_test, boost_pred_test_probs)
 roc_rf_no_impute = roc(y_test, rf_pred_test_probs_no_impute)
@@ -349,22 +369,8 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
        col = 1:2, lwd = 2)
 ```
 
-```{r RF with bagged impute}
-set.seed(2022)
+```{r hierarchical clustering}
 
-# Just for fun: let's try random forest with bagged imputation
-preprocess_recipe_bagged = recipe(ten_year_chd ~ ., data = training_df) %>%
-  step_impute_bag(all_predictors()) %>%  # Bagged imputation 
-  step_BoxCox(all_numeric_predictors()) %>% # transform predictors
-  step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
-  step_scale(all_numeric_predictors())
-
-rf_fit = train(preprocess_recipe_bagged,
-              data = training_df,
-              method = "ranger",
-              tuneGrid = rf_grid,
-              metric = "ROC",
-              trControl = ctrl)
 ```
 
 
