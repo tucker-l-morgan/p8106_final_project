@@ -369,10 +369,27 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
        col = 1:2, lwd = 2)
 ```
 
-```{r hierarchical clustering}
+```{r SVM}
+# Trying SVM for fun
+set.seed(2022)
 
+svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
+                       sigma = exp(seq(-3, 0, len = 50)))
+
+svm_fit_impute_classes = train(preprocess_recipe,
+                      data = training_df,
+                      method = "svmRadialSigma",
+                      tuneGrid = svm_grid,
+                      trControl = ctrl)
+
+# I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
+svm_fit_impute_probs = train(preprocess_recipe,
+                            data = training_df,
+                            method = "svmRadialSigma",
+                            tuneGrid = svm_grid,
+                            trControl = ctrl,
+                            prob.model = TRUE)
 ```
-
 
 ## Appendix
 
