@@ -122,67 +122,6 @@ cleaned_df = all_df %>%
   )
 ```
 
-```{r missing data, include = FALSE}
-# Number of rows with any missing data
-rows_missing_data = sum(!complete.cases(cleaned_df))
-
-# Missing data pattern
-# 582 rows (13.7% of observations) missing 1+ data points
-# Highest missingness rates: glucose (9.15%), education (2.48%), bp_meds (1.25%), tot_chol (1.18%)
-missing_data_viz = cleaned_df %>% 
-  vis_miss()
-```
-
-## EDA Figures
-
-```{r continuous variable feature plot, include = FALSE, eval = TRUE}
-# Distributions of continuous variables factored by outcome
-continuous_vars_df = cleaned_df %>% 
-  dplyr::select(age, cigs_per_day, tot_chol, sys_bp, dia_bp, bmi, heart_rate, glucose, ten_year_chd) %>% 
-  as.data.frame()
-
-continuous_explore = continuous_vars_df %>% 
-  melt(id.vars = "ten_year_chd") %>% 
-  ggplot(aes(x = value, y = ten_year_chd)) + 
-  stat_density_ridges(aes(color = ten_year_chd, fill = ten_year_chd), alpha = 0.2, quantile_lines = TRUE, quantiles = 2, jittered_points = TRUE) + 
-  facet_wrap(~variable, scales = "free", nrow = 2) + 
-  labs(x = "",
-       y = "Density",
-       fill = "10 Year CHD Status",
-       color = "10 Year CHD Status") +
-  theme(legend.position = "none")
-```
-
-```{r categorical variable viz, include = FALSE, eval = TRUE}
-# Distributions of categorical variables factored by outcome
-categorical_vars_df = cleaned_df %>% 
-  dplyr::select(-age, -cigs_per_day, -tot_chol, -sys_bp, -dia_bp, -bmi, -heart_rate, -glucose) %>% 
-  as.data.frame()
-
-categorical_explore = categorical_vars_df %>% 
-  melt(id.vars = "ten_year_chd") %>% 
-  ggplot(aes(x = value, fill = ten_year_chd)) + 
-  geom_bar(position = "fill") + 
-  facet_wrap(~variable, scales = "free", nrow = 2) + 
-  scale_y_continuous(labels = scales::percent) + 
-  labs(x = "",
-        y = "Proportion by CHD Status",
-       fill = "10 Year CHD Status",
-       color = "10 Year CHD Status")
-```
-
-```{r combined eda figure, include = TRUE, eval = TRUE}
-continuous_explore / categorical_explore + plot_annotation(
-  title = "Fig.1: Distributions of Predictors By Outcome Class"
-)
-```
-
-```{r correlation plot, include = TRUE, eval = TRUE}
-model.matrix(~0 + ., data = cleaned_df) %>%
-  cor(use = "pairwise.complete.obs") %>% 
-  ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 2, title = "Fig.2: Correlation of Predictors")
-```
-
 ## New Models
 
 ```{r model tuning setup full data set, include = FALSE}
@@ -209,28 +148,6 @@ ctrl = trainControl(method = "repeatedcv",
                     classProbs = TRUE)
 ```
 
-```{r model tuning setup dropped data set}
-# Data frames with no imputation, missing values dropped
-dropped_df = cleaned_df %>% 
-  na.omit()
-
-set.seed(2022)
-
-# Training/testing partition
-index_train_dropped = createDataPartition(dropped_df$ten_year_chd, 
-                                          p = 0.8,
-                                          list = FALSE)
-
-training_df_dropped = dropped_df[index_train_dropped, ]
-testing_df_dropped = dropped_df[-index_train_dropped, ]
-
-# Model matrices
-x_train = model.matrix(ten_year_chd ~ ., training_df_dropped)[, -1]
-x_test = model.matrix(ten_year_chd ~ ., testing_df_dropped)[, -1]
-y_train = training_df_dropped$ten_year_chd
-y_test = testing_df_dropped$ten_year_chd
-```
-
 ```{r preprocessing with recipe}
 # Preprocessing and feature engineering with recipe (including imputation)
 # Note: assuming data is MAR
@@ -242,6 +159,48 @@ preprocess_recipe = recipe(ten_year_chd ~ ., data = training_df) %>%
   step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
   step_scale(all_numeric_predictors())
 ```
+
+```{r GLMNet}
+# Penalized logistic regression
+set.seed(2022)
+
+glm_grid = expand.grid(alpha = seq(0, 1, length = 11),
+                       lambda = exp(seq(-8, -3, length = 19)))
+
+logit_glm = train(preprocess_recipe,
+                  data = training_df,
+                  method = "glmnet",
+                  tuneGrid = glm_grid,
+                  metric = "ROC",
+                  trControl = ctrl,
+                  family = "binomial")
+
+# Tells us 7 variables were transformed
+logit_glm
+
+# Check which variables are transformed
+logit_glm$preProcess$bc
+
+# Optimal tuning parameters
+logit_glm$bestTune
+
+# Plots of optimal tuning parameters
+myCol = rainbow(15)
+myPar = list(superpose.symbol = list(col = myCol),
+             superpose.line = list(col = myCol))
+
+plot(logit_glm, par.settings = myPar, xTrans = function(x) log(x))
+
+logit_tuning_graph = ggplot(logit_glm, highlight = T) + 
+  scale_x_continuous(trans = "log") + 
+  labs(title = "Penalized Logistic Regression",
+       x = "Lambda",
+       y = "AUC")
+
+# Variable importance
+logit_vip_graph = vip(logit_glm, num_features = 20, method = "model")
+```
+
 
 ```{r random forest with imputation}
 # Random forest with imputation
@@ -309,6 +268,28 @@ confusionMatrix(data = boost_pred_test_class,
                 reference = y_test)
 ```
 
+```{r SVM}
+# Trying SVM for fun
+set.seed(2022)
+
+svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
+                       sigma = exp(seq(-3, 0, len = 50)))
+
+svm_fit_impute_classes = train(preprocess_recipe,
+                      data = training_df,
+                      method = "svmRadialSigma",
+                      tuneGrid = svm_grid,
+                      trControl = ctrl)
+
+# I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
+svm_fit_impute_probs = train(preprocess_recipe,
+                            data = training_df,
+                            method = "svmRadialSigma",
+                            tuneGrid = svm_grid,
+                            trControl = ctrl,
+                            prob.model = TRUE)
+```
+
 ```{r resampling train results}
 resamp = resamples(list(random_forest_knn_impute = rf_fit, 
                          adaboost_knn_impute = boost_fit))
@@ -336,28 +317,6 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
 
 # Still In Progress
 
-```{r SVM}
-# Trying SVM for fun
-set.seed(2022)
-
-svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
-                       sigma = exp(seq(-3, 0, len = 50)))
-
-svm_fit_impute_classes = train(preprocess_recipe,
-                      data = training_df,
-                      method = "svmRadialSigma",
-                      tuneGrid = svm_grid,
-                      trControl = ctrl)
-
-# I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
-svm_fit_impute_probs = train(preprocess_recipe,
-                            data = training_df,
-                            method = "svmRadialSigma",
-                            tuneGrid = svm_grid,
-                            trControl = ctrl,
-                            prob.model = TRUE)
-```
-
 ```{r rf variable importance}
 set.seed(2022)
 
@@ -373,3 +332,4 @@ barplot(sort(ranger::importance(vp_ranger), decreasing = FALSE),
         las = 2, horiz = TRUE, cex.names = 0.7,
         col = colorRampPalette(colors = c("cyan", "blue"))(16))
 ```
+
