@@ -1,6 +1,6 @@
 ---
-title: 'Applications in Machine Learning to Predict Coronary Heart Disease'
-author: 'Zachary Katz (zak2132), Hun Lee (sl4836), and Tucker Morgan (tlm2152)'
+title: 'ZK Models'
+author: 'Zachary Katz (zak2132)'
 date: "5/12/2022"
 output: 
   pdf_document:
@@ -18,14 +18,14 @@ output:
 ---
 
 ```{r libraries and setup, include = FALSE, echo = FALSE}
-# TM: are we using all of these? can we remove if not?
+# Includes excess libraries (for now)
 library(tidyverse)
 library(ggplot2)
 library(skimr)
 library(visdat)
 library(reshape2)
 library(DataExplorer)
-library(ggcorrplot) # I prefer this option, we should remove whichever lib we don't use
+library(ggcorrplot)
 library(caret)
 library(vip)
 library(mgcv)
@@ -47,7 +47,7 @@ knitr::opts_chunk$set(
   message = FALSE,
   cache = TRUE,
   include = FALSE,
-  eval = FALSE, # placed by Tucker to knit EDA
+  eval = FALSE,
   fig.height = 6,
   fig.width = 8
   )
@@ -123,7 +123,7 @@ cleaned_df = all_df %>%
   )
 ```
 
-## New Models
+## Models
 
 ```{r model tuning setup full data set, include = FALSE}
 set.seed(2022)
@@ -155,15 +155,14 @@ ctrl = trainControl(method = "repeatedcv",
 
 # recipe of preprocessing steps
 preprocess_recipe = recipe(ten_year_chd ~ ., data = training_df) %>%
-  step_impute_knn(all_predictors(), neighbors = 5) %>%  # KNN imputation based on 5 nearest neighbors; open question: can this k neighbors be optimized with xval?
+  step_impute_knn(all_predictors(), neighbors = 5) %>%  # KNN imputation based on 5 nearest neighbors
   step_BoxCox(all_numeric_predictors()) %>% # transform predictors
   step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
   step_scale(all_numeric_predictors())
 ```
 
 ```{r GLMNet imputation in caret}
-# Penalized logistic regression
-# https://stackoverflow.com/questions/48179423/error-error-in-lognetx-is-sparse-ix-jx-y-weights-offset-alpha-nobs/48230658#48230658
+# Penalized logistic regression with imputation in caret function directly (NOT recipes)
 set.seed(2022)
 
 glm_grid = expand.grid(alpha = seq(0, 1, length = 11),
@@ -185,13 +184,8 @@ logit_next = train(ten_year_chd ~ .,
                   family = "binomial",
                   preProcess = c("knnImpute", "center", "scale", "BoxCox"))
 
-# Tells us 7 variables were transformed
-logit_next
-
-# Check which variables are transformed
-logit_next$preProcess$bc
-
 # Optimal tuning parameters
+# Alpha = 0.3, Lambda = 0.0164
 logit_next$bestTune
 
 # Plots of optimal tuning parameters
@@ -208,22 +202,25 @@ logit_tuning_graph = ggplot(logit_next, highlight = T) +
        y = "AUC")
 
 # Variable importance
+# Most important variables: age, sys_bp, sexfemale, cigs_per_day
 logit_vip_graph = vip(logit_next, num_features = 20, method = "model")
 
-# Class probabilities
+# Test data: predicted probabilities
 glmnet_pred_test_probs = predict(logit_next, newdata = testing_df, type = "prob",
                                  na.action = na.pass)[,1]
 
+# Test data: predicted classes
 glmnet_pred_test_class = predict(logit_next, newdata = testing_df, type = "raw",
                                  na.action = na.pass)
 
-# Confusion matrix
+# Test data: confusion matrix
+# Accuracy: 0.854
 confusionMatrix(data = glmnet_pred_test_class,
                 reference = y_test)
 ```
 
 ```{r random forest imputation with recipes}
-# Random forest with imputation
+# Random forest with imputation from recipes package
 set.seed(2022)
 
 # RF grid
@@ -239,21 +236,52 @@ rf_fit = train(preprocess_recipe,
               metric = "ROC",
               trControl = ctrl)
 
+# Optimal tuning parameters: 1 randomly selected predictor, min node size = 10
+# Note: try tuning parameters > 10 min node size in grid?
 ggplot(rf_fit, highlight = TRUE)
 
-# Performance on test data
+# Variable importance: permutation / gini
+# sys_bp, dia_bp, glucose, prevalent_hyp
+rf_recipe_var_imp_permutation = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_fit$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_fit$bestTune[[3]],
+                           importance = "permutation",
+                           scale.permutation.importance = TRUE)
 
-# Class probabilities
+barplot(sort(ranger::importance(rf_recipe_var_imp_permutation), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Variable importance: impurity / gini
+# sys_bp, age, dia_bp, glucose
+rf_recipe_var_imp_impurity = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_fit$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_fit$bestTune[[3]],
+                           importance = "impurity",
+                           scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf_recipe_var_imp_impurity), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Test data: predicted probabilities
 rf_pred_test_probs = predict(rf_fit, newdata = testing_df, type = "prob")[,1]
 
+# Test data: predicted classes
 rf_pred_test_class = predict(rf_fit, newdata = testing_df, type = "raw")
 
-# Confusion matrix
+# Test data: confusion matrix
+# Accuracy: 0.849
 confusionMatrix(data = rf_pred_test_class,
                 reference = y_test)
 ```
 
 ```{r random forest imputation in caret}
+# Random forest with imputation from caret function directly (NOT recipes)
 set.seed(2022)
 
 ctrl_RF = trainControl(method = "repeatedcv",
@@ -271,22 +299,53 @@ rf_caret = train(ten_year_chd ~ .,
                   trControl = ctrl_RF,
                   preProcess = c("knnImpute", "center", "scale", "BoxCox"))
 
-# Performance on test data
+# Optimal tuning parameters: 1 randomly selected predictor, min node size = 2
+ggplot(rf_caret, highlight = TRUE)
 
-# Class probabilities
+# Variable importance: permutation / gini
+# sys_bp, dia_bp, prevalent_hyp, glucose
+rf_caret_var_imp_permutation = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_caret$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_caret$bestTune[[3]],
+                           importance = "permutation",
+                           scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf_caret_var_imp_permutation), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Variable importance: impurity / gini
+# sys_bp, age, dia_bp, glucose
+rf_caret_var_imp_impurity = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_caret$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_caret$bestTune[[3]],
+                           importance = "impurity",
+                           scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf_caret_var_imp_impurity), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Test data: predicted probabilities
 rf_caret_pred_test_probs = predict(rf_caret, newdata = testing_df, type = "prob",
                                    na.action = na.pass)[,1]
 
+# Test data: predicted classes
 rf_caret_pred_test_class = predict(rf_caret, newdata = testing_df, type = "raw",
                                    na.action = na.pass)
 
-# Confusion matrix
+# Test data: confusion matrix
+# Accuracy: 0.849
 confusionMatrix(data = rf_caret_pred_test_class,
                 reference = y_test)
 ```
 
 ```{r boosting imputation with recipes}
-# Boosting with imputation
+# Boosting with imputation from recipes package
 set.seed(2022)
 
 # Grid search for adaboost
@@ -305,42 +364,78 @@ boost_fit = train(preprocess_recipe,
                   metric = "ROC",
                   verbose = FALSE)
 
+# Optimal tuning parameters: max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
 ggplot(boost_fit, highlight = TRUE)
 
-# Performance on test data
+# Variable importance
+# age, sys_bp, glucose, cigs_per_day
+summary(boost_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
-# Class probabilities
+# Test data: predicted probabilities
 boost_pred_test_probs = predict(boost_fit, newdata = testing_df, type = "prob")[,1]
 
+# Test data: predicted classes
 boost_pred_test_class = predict(boost_fit, newdata = testing_df, type = "raw")
 
-# Confusion matrix
+# Test data: confusion matrix
+# Accuracy: 0.854
 confusionMatrix(data = boost_pred_test_class,
                 reference = y_test)
 ```
 
 ```{r boosting imputation with caret}
-# Boosting with imputation
+# Boosting with imputation directly from caret (NOT recipes)
 set.seed(2022)
+
+ctrl_boost = trainControl(method = "repeatedcv",
+                    repeats = 5,
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE,
+                    preProcOptions = list(k = 5))
 
 # Train boosting model
 boost_caret = train(ten_year_chd ~ .,
                    data = training_df,
                    na.action = na.pass,
                   tuneGrid = adaboost_grid,
-                  trControl = ctrl,
+                  trControl = ctrl_boost,
                   method = "gbm",
                   distribution = "adaboost",
                   metric = "ROC",
-                  verbose = FALSE)
+                  verbose = FALSE,
+                  preProcess = c("knnImpute", "center", "scale", "BoxCox"))
+
+# Optimal tuning parameters
+# Max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
+ggplot(boost_caret, highlight = TRUE)
+
+# Variable importance
+# age, sys_bp, glucose, cigs_per_day
+summary(boost_caret$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
+# Test data: predicted probabilities
+boost_caret_pred_test_probs = predict(boost_caret, newdata = testing_df, type = "prob",
+                                   na.action = na.pass)[,1]
+
+# Test data: predicted classes
+boost_caret_pred_test_class = predict(boost_caret, newdata = testing_df, type = "raw",
+                                   na.action = na.pass)
+
+# Test data: confusion matrix
+# Accuracy: 0.851
+confusionMatrix(data = boost_caret_pred_test_class,
+                reference = y_test)
 ```
 
 ```{r resampling train results}
+# Results from resampling on training data 
 resamp = resamples(list(random_forest_recipes_impute = rf_fit, 
                          adaboost_recipes_impute = boost_fit,
                         glmnet = logit_next,
-                        random_forest_caret_impute = rf_caret))
-                   
+                        random_forest_caret_impute = rf_caret,
+                        boost_caret_impute = boost_caret))
+
+# Median AUC is highest for glmnet (0.727), and boost_caret_impute (0.722)                   
 summary(resamp)
 
 bwplot(resamp, layout = c(3, 1))
@@ -348,22 +443,26 @@ bwplot(resamp, layout = c(3, 1))
 
 ```{r auc and roc testing}
 # ROC curves for fitted models applied to testing data
+# AUC is highest for glmnet and boost_caret_impute (0.74 for both)
+
 roc_rf_recipes_impute = roc(y_test, rf_pred_test_probs)
 roc_boost_impute = roc(y_test, boost_pred_test_probs)
 roc_glmnet = roc(y_test, glmnet_pred_test_probs)
 roc_rf_caret_impute = roc(y_test, rf_caret_pred_test_probs)
+roc_boost_caret_impute = roc(y_test, boost_caret_pred_test_probs)
 
 plot(roc_rf_recipes_impute, col = 1)
 plot(roc_boost_impute, add = TRUE, col = 2)
 plot(roc_glmnet, add = TRUE, col = 3)
 plot(roc_rf_caret_impute, add = TRUE, col = 4)
+plot(roc_boost_caret_impute, add = TRUE, col = 5)
 
-auc = c(roc_rf_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], roc_rf_caret_impute$auc[1])
+auc = c(roc_rf_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1])
 
-model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Impute", "Random Forest w/ Caret")
+model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Impute", "Random Forest w/ Caret", "Boost w/ Caret")
 
 legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
-       col = 1:3, lwd = 2)
+       col = 1:5, lwd = 2)
 ```
 
 # Still In Progress
