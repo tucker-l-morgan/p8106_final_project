@@ -41,6 +41,7 @@ library(reshape)
 library(recipes)
 library(glmnet)
 library(rpart.plot)
+library(MASS)
 
 knitr::opts_chunk$set(
   echo = TRUE,
@@ -524,6 +525,43 @@ confusionMatrix(data = svm_linear_pred_class_test,
                 reference = y_test)
 ```
 
+```{r LDA}
+# LDA in caret, imputation from caret (recipes gives errors, non-numeric argument to binary operator)
+set.seed(2022)
+
+lda_ctrl = trainControl(method = "repeatedcv",
+                    repeats = 5,
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE,
+                    preProcOptions = list(k = 5))
+
+LDA_model_caret = train(ten_year_chd ~ .,
+                  data = training_df,
+                  na.action = na.pass,
+                  method = "lda",
+                  metric = "ROC",
+                  trControl = lda_ctrl,
+                  preProcess = c("knnImpute", "center", "scale", "BoxCox"))
+
+# Examine results
+# AUC: 0.716
+LDA_model_caret$results
+
+# Test data: predicted probabilities
+lda_pred_prob_test = predict(LDA_model_caret, newdata = testing_df,
+                       type = "prob", na.action = na.pass)[,1]
+
+# Test data: predicted classes
+lda_pred_class_test = predict(LDA_model_caret, newdata = testing_df, type = "raw",
+                                     na.action = na.pass)
+
+# Test data: confusion matrix
+# Accuracy: 0.85
+confusionMatrix(data = lda_pred_class_test,
+                reference = y_test)
+```
+
+
 ```{r resampling train results}
 # Results from resampling on training data 
 resamp = resamples(list(random_forest_recipes_impute = rf_fit, 
@@ -533,7 +571,8 @@ resamp = resamples(list(random_forest_recipes_impute = rf_fit,
                         boost_caret_impute = boost_caret,
                         cart_tree = cart_fit,
                         cit_tree = cit_fit,
-                        svm_linear = svm_linear_fit))
+                        svm_linear = svm_linear_fit,
+                        lda = LDA_model_caret))
 
 # Median AUC is highest for glmnet (0.727), and boost_caret_impute (0.722)                   
 summary(resamp)
@@ -553,6 +592,7 @@ roc_boost_caret_impute = roc(y_test, boost_caret_pred_test_probs)
 roc_cart_impute = roc(y_test, cart_pred_prob_test)
 roc_cit_impute = roc(y_test, cit_pred_prob_test)
 roc_svm_linear_impute = roc(y_test, svm_linear_pred_prob_test)
+roc_lda = roc(y_test, lda_pred_prob_test)
 
 plot(roc_rf_recipes_impute, col = 1)
 plot(roc_boost_impute, add = TRUE, col = 2)
@@ -562,16 +602,17 @@ plot(roc_boost_caret_impute, add = TRUE, col = 5)
 plot(roc_cart_impute, add = TRUE, col = 6)
 plot(roc_cit_impute, add = TRUE, col = 7)
 plot(roc_svm_linear_impute, add = TRUE, col = 8)
+plot(roc_lda, add = TRUE, col = 9)
 
 auc = c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], 
         roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1], roc_cart_impute$auc[1],
-        roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1])
+        roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_lda$auc[1])
 
 model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Impute", 
-                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Impute", "CIT w/ Impute", "Linear SVM w/ Caret")
+                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Impute", "CIT w/ Impute", "Linear SVM w/ Caret", "LDA w/ Caret")
 
 legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
-       col = 1:8, lwd = 2)
+       col = 1:9, lwd = 2)
 ```
 
 # Still In Progress
