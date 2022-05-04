@@ -40,6 +40,7 @@ library(groupdata2)
 library(reshape)
 library(recipes)
 library(glmnet)
+library(rpart.plot)
 
 knitr::opts_chunk$set(
   echo = TRUE,
@@ -425,13 +426,113 @@ confusionMatrix(data = boost_caret_pred_test_class,
                 reference = y_test)
 ```
 
+```{r CART tree}
+# CART tree with recipe imputation
+set.seed(2022)
+
+cart_fit = train(preprocess_recipe,
+                  data = training_df, 
+                   method = "rpart",
+                   tuneGrid = data.frame(cp = exp(seq(-9,-5, len = 50))),
+                   trControl = ctrl,
+                   metric = "ROC")
+
+# Optimal tuning parameter
+ggplot(cart_fit, highlight = TRUE)
+
+# Final model
+rpart.plot(cart_fit$finalModel)
+
+# Test data: predicted probabilities
+cart_pred_prob_test = predict(cart_fit, newdata = testing_df,
+                       type = "prob")[,1]
+
+# Test data: predicted classes
+cart_pred_class_test = predict(cart_fit, newdata = testing_df, type = "raw")
+
+# Test data: confusion matrix
+# Accuracy: 0.799
+confusionMatrix(data = cart_pred_class_test,
+                reference = y_test)
+```
+
+```{r CIT tree}
+# CIT tree with recipe imputation
+set.seed(2022)
+
+cit_fit = train(preprocess_recipe,
+                  data = training_df,
+                   method = "ctree",
+                   tuneGrid = data.frame(mincriterion = 1-exp(seq(-2, -1, length = 50))),
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Optimal tuning parameter
+ggplot(cit_fit, highlight = TRUE)
+
+# Final model
+plot(cit_fit$finalModel)
+
+# Test data: predicted probabilities
+cit_pred_prob_test = predict(cit_fit, newdata = testing_df,
+                       type = "prob")[,1]
+
+# Test data: predicted classes
+cit_pred_class_test = predict(cit_fit, newdata = testing_df, type = "raw")
+
+# Test data: confusion matrix
+# Accuracy: 0.844
+confusionMatrix(data = cit_pred_class_test,
+                reference = y_test)
+```
+
+```{r SVM linear caret impute}
+# SVM linear with impute in caret directly
+# ROC seems < 0.6, quite poor
+set.seed(2022)
+
+ctrl_linear_svm = trainControl(method = "repeatedcv",
+                    repeats = 5,
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE,
+                    preProcOptions = list(k = 5))
+
+svm_linear_fit = train(ten_year_chd ~ .,
+                       data = training_df,
+                       na.action = na.pass,
+                       method = "svmLinear",
+                       tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))),
+                       trControl = ctrl_linear_svm,
+                       prob.model = TRUE,
+                  preProcess = c("knnImpute", "center", "scale", "BoxCox")
+                       )
+
+plot(svm_linear_fit, highlight = TRUE, xTrans = log)
+
+# Test data: predicted probabilities
+svm_linear_pred_prob_test = predict(svm_linear_fit, newdata = testing_df,
+                       type = "prob", na.action = na.pass)[,1]
+
+# Test data: predicted classes
+svm_linear_pred_class_test = predict(svm_linear_fit, newdata = testing_df, type = "raw",
+                                     na.action = na.pass)
+
+# Test data: confusion matrix
+# Accuracy: 0.849
+confusionMatrix(data = svm_linear_pred_class_test,
+                reference = y_test)
+```
+
 ```{r resampling train results}
 # Results from resampling on training data 
 resamp = resamples(list(random_forest_recipes_impute = rf_fit, 
                          adaboost_recipes_impute = boost_fit,
                         glmnet = logit_next,
                         random_forest_caret_impute = rf_caret,
-                        boost_caret_impute = boost_caret))
+                        boost_caret_impute = boost_caret,
+                        cart_tree = cart_fit,
+                        cit_tree = cit_fit,
+                        svm_linear = svm_linear_fit))
 
 # Median AUC is highest for glmnet (0.727), and boost_caret_impute (0.722)                   
 summary(resamp)
@@ -448,25 +549,49 @@ roc_boost_impute = roc(y_test, boost_pred_test_probs)
 roc_glmnet = roc(y_test, glmnet_pred_test_probs)
 roc_rf_caret_impute = roc(y_test, rf_caret_pred_test_probs)
 roc_boost_caret_impute = roc(y_test, boost_caret_pred_test_probs)
+roc_cart_impute = roc(y_test, cart_pred_prob_test)
+roc_cit_impute = roc(y_test, cit_pred_prob_test)
+roc_svm_linear_impute = roc(y_test, svm_linear_pred_prob_test)
 
 plot(roc_rf_recipes_impute, col = 1)
 plot(roc_boost_impute, add = TRUE, col = 2)
 plot(roc_glmnet, add = TRUE, col = 3)
 plot(roc_rf_caret_impute, add = TRUE, col = 4)
 plot(roc_boost_caret_impute, add = TRUE, col = 5)
+plot(roc_cart_impute, add = TRUE, col = 6)
+plot(roc_cit_impute, add = TRUE, col = 7)
+plot(roc_svm_linear_impute, add = TRUE, col = 8)
 
-auc = c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1])
+auc = c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], 
+        roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1], roc_cart_impute$auc[1],
+        roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1])
 
-model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Impute", "Random Forest w/ Caret", "Boost w/ Caret")
+model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Impute", 
+                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Impute", "CIT w/ Impute", "Linear SVM w/ Caret")
 
 legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
-       col = 1:5, lwd = 2)
+       col = 1:8, lwd = 2)
 ```
 
 # Still In Progress
 
-```{r SVM}
-# # Trying SVM for fun
+```{r SVM linear recipe}
+# SVM with linear kernel, imputation from recipe
+# Doesn't work; will try impute from train function instead
+# set.seed(2022)
+# 
+# svm_linear_fit = train(preprocess_recipe,
+#                        data = training_df,
+#                        method = "svmLinear",
+#                        tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))),
+#                        trControl = ctrl
+#                        )
+# 
+# plot(svm_linear_fit, highlight = TRUE, xTrans = log)
+```
+
+```{r SVM radial}
+# Trying SVM with radial classifier for fun
 # set.seed(2022)
 # 
 # svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
