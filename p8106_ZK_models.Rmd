@@ -46,8 +46,6 @@ knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
   cache = TRUE,
-  include = FALSE,
-  eval = FALSE,
   fig.height = 6,
   fig.width = 8
   )
@@ -68,7 +66,7 @@ scale_fill_discrete = scale_fill_viridis_d
 
 ## Introduction
 
-```{r importing and cleaning data, include = FALSE, eval = TRUE}
+```{r importing and cleaning data}
 # Read in all data
 # source: https://raw.githubusercontent.com/TarekDib03/Analytics/master/Week3%20-%20Logistic%20Regression/Data/framingham.csv
 all_df = read_csv("FHS.csv")
@@ -125,7 +123,7 @@ cleaned_df = all_df %>%
 
 ## Models
 
-```{r model tuning setup full data set, include = FALSE}
+```{r model tuning setup full data set}
 set.seed(2022)
 
 # Training/testing partition
@@ -457,7 +455,7 @@ plot(roc_glmnet, add = TRUE, col = 3)
 plot(roc_rf_caret_impute, add = TRUE, col = 4)
 plot(roc_boost_caret_impute, add = TRUE, col = 5)
 
-auc = c(roc_rf_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1])
+auc = c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1])
 
 model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Impute", "Random Forest w/ Caret", "Boost w/ Caret")
 
@@ -468,58 +466,42 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
 # Still In Progress
 
 ```{r SVM}
-# Trying SVM for fun
-set.seed(2022)
-
-svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
-                       sigma = exp(seq(-3, 0, len = 50)))
-
-svm_fit_impute_classes = train(preprocess_recipe,
-                      data = training_df,
-                      method = "svmRadialSigma",
-                      tuneGrid = svm_grid,
-                      trControl = ctrl)
-
-# I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
-svm_fit_impute_probs = train(preprocess_recipe,
-                            data = training_df,
-                            method = "svmRadialSigma",
-                            tuneGrid = svm_grid,
-                            trControl = ctrl,
-                            prob.model = TRUE)
-```
-
-```{r rf variable importance}
-set.seed(2022)
-
-# ZK: Appears not to work after preprocessing that includes imputation?
-vp_ranger = ranger::ranger(ten_year_chd ~ .,
-                           training_df,
-                           mtry = rf_fit$bestTune[[1]],
-                           splitrule = "gini",
-                           min.node.size = rf_fit$bestTune[[3]],
-                           importance = "impurity")
-
-barplot(sort(ranger::importance(vp_ranger), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(16))
+# # Trying SVM for fun
+# set.seed(2022)
+# 
+# svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
+#                        sigma = exp(seq(-3, 0, len = 50)))
+# 
+# svm_fit_impute_classes = train(preprocess_recipe,
+#                       data = training_df,
+#                       method = "svmRadialSigma",
+#                       tuneGrid = svm_grid,
+#                       trControl = ctrl)
+# 
+# # I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
+# svm_fit_impute_probs = train(preprocess_recipe,
+#                             data = training_df,
+#                             method = "svmRadialSigma",
+#                             tuneGrid = svm_grid,
+#                             trControl = ctrl,
+#                             prob.model = TRUE)
 ```
 
 ```{r GLMNet with recipe}
-# Penalized logistic regression
-# Doesn't work
-# https://stackoverflow.com/questions/48179423/error-error-in-lognetx-is-sparse-ix-jx-y-weights-offset-alpha-nobs/48230658#48230658
-set.seed(2022)
-
-glm_grid = expand.grid(alpha = seq(0, 1, length = 11),
-                       lambda = exp(seq(-8, -3, length = 19)))
-
-logit_glm = train(preprocess_recipe,
-                  data = training_df,
-                  method = "glmnet",
-                  tuneGrid = glm_grid,
-                  metric = "ROC",
-                  trControl = ctrl,
-                  family = "binomial")
+# # Penalized logistic regression
+# # Doesn't work
+# # https://stackoverflow.com/questions/48179423/error-error-in-lognetx-is-sparse-ix-jx-y-weights-offset-alpha-nobs/48230658#48230658
+# set.seed(2022)
+# 
+# glm_grid = expand.grid(alpha = seq(0, 1, length = 11),
+#                        lambda = exp(seq(-8, -3, length = 19)))
+# 
+# logit_glm = train(preprocess_recipe,
+#                   data = training_df,
+#                   method = "glmnet",
+#                   tuneGrid = glm_grid,
+#                   metric = "ROC",
+#                   trControl = ctrl,
+#                   family = "binomial")
 ```
 
