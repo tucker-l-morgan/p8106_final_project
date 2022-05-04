@@ -497,6 +497,7 @@ ctrl_linear_svm = trainControl(method = "repeatedcv",
                     classProbs = TRUE,
                     preProcOptions = list(k = 5))
 
+# I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
 svm_linear_fit = train(ten_year_chd ~ .,
                        data = training_df,
                        na.action = na.pass,
