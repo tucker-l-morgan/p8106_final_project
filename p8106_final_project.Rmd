@@ -280,27 +280,6 @@ logit_next = train(ten_year_chd ~ .,
                   family = "binomial",
                   preProcess = c("knnImpute", "center", "scale", "BoxCox"))
 
-# Optimal tuning parameters
-# Alpha = 0.3, Lambda = 0.0164
-logit_next$bestTune
-
-# Plots of optimal tuning parameters
-myCol = rainbow(15)
-myPar = list(superpose.symbol = list(col = myCol),
-             superpose.line = list(col = myCol))
-
-plot(logit_next, par.settings = myPar, xTrans = function(x) log(x))
-
-logit_tuning_graph = ggplot(logit_next, highlight = T) + 
-  scale_x_continuous(trans = "log") + 
-  labs(title = "Penalized Logistic Regression",
-       x = "Lambda",
-       y = "AUC")
-
-# Variable importance
-# Most important variables: age, sys_bp, sexfemale, cigs_per_day
-logit_vip_graph = vip(logit_next, num_features = 20, method = "model")
-
 # Test data: predicted probabilities
 glmnet_pred_test_probs = predict(logit_next, newdata = testing_df, type = "prob",
                                  na.action = na.pass)[,1]
@@ -331,38 +310,6 @@ rf_fit = train(preprocess_recipe,
               tuneGrid = rf_grid_one,
               metric = "ROC",
               trControl = ctrl)
-
-# Optimal tuning parameters: 1 randomly selected predictor, min node size = 10
-# Note: try tuning parameters > 10 min node size in grid?
-ggplot(rf_fit, highlight = TRUE)
-
-# Variable importance: permutation / gini
-# sys_bp, dia_bp, glucose, prevalent_hyp
-rf_recipe_var_imp_permutation = ranger(ten_year_chd ~ ., 
-                           training_df[complete.cases(training_df),],
-                           mtry = rf_fit$bestTune[[1]],
-                           splitrule = "gini",
-                           min.node.size = rf_fit$bestTune[[3]],
-                           importance = "permutation",
-                           scale.permutation.importance = TRUE)
-
-barplot(sort(ranger::importance(rf_recipe_var_imp_permutation), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
-
-# Variable importance: impurity / gini
-# sys_bp, age, dia_bp, glucose
-rf_recipe_var_imp_impurity = ranger(ten_year_chd ~ ., 
-                           training_df[complete.cases(training_df),],
-                           mtry = rf_fit$bestTune[[1]],
-                           splitrule = "gini",
-                           min.node.size = rf_fit$bestTune[[3]],
-                           importance = "impurity",
-                           scale.permutation.importance = TRUE)
-
-barplot(sort(ranger::importance(rf_recipe_var_imp_impurity), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
 
 # Test data: predicted probabilities
 rf_pred_test_probs = predict(rf_fit, newdata = testing_df, type = "prob")[,1]
@@ -399,37 +346,6 @@ rf_caret = train(ten_year_chd ~ .,
                   trControl = ctrl_RF,
                   preProcess = c("knnImpute", "center", "scale", "BoxCox"))
 
-# Optimal tuning parameters: 1 randomly selected predictor, min node size = 2
-ggplot(rf_caret, highlight = TRUE)
-
-# Variable importance: permutation / gini
-# sys_bp, dia_bp, prevalent_hyp, glucose
-rf_caret_var_imp_permutation = ranger(ten_year_chd ~ ., 
-                           training_df[complete.cases(training_df),],
-                           mtry = rf_caret$bestTune[[1]],
-                           splitrule = "gini",
-                           min.node.size = rf_caret$bestTune[[3]],
-                           importance = "permutation",
-                           scale.permutation.importance = TRUE)
-
-barplot(sort(ranger::importance(rf_caret_var_imp_permutation), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
-
-# Variable importance: impurity / gini
-# sys_bp, age, dia_bp, glucose
-rf_caret_var_imp_impurity = ranger(ten_year_chd ~ ., 
-                           training_df[complete.cases(training_df),],
-                           mtry = rf_caret$bestTune[[1]],
-                           splitrule = "gini",
-                           min.node.size = rf_caret$bestTune[[3]],
-                           importance = "impurity",
-                           scale.permutation.importance = TRUE)
-
-barplot(sort(ranger::importance(rf_caret_var_imp_impurity), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
-
 # Test data: predicted probabilities
 rf_caret_pred_test_probs = predict(rf_caret, newdata = testing_df, type = "prob",
                                    na.action = na.pass)[,1]
@@ -463,14 +379,6 @@ boost_fit = train(preprocess_recipe,
                   distribution = "adaboost",
                   metric = "ROC",
                   verbose = FALSE)
-
-# Optimal tuning parameters: max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
-# Try more boosting iterations and higher shrinkage?
-ggplot(boost_fit, highlight = TRUE)
-
-# Variable importance
-# age, sys_bp, glucose, cigs_per_day
-summary(boost_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
 # Test data: predicted probabilities
 boost_pred_test_probs = predict(boost_fit, newdata = testing_df, type = "prob")[,1]
@@ -506,15 +414,6 @@ boost_caret = train(ten_year_chd ~ .,
                   verbose = FALSE,
                   preProcess = c("knnImpute", "center", "scale", "BoxCox"))
 
-# Optimal tuning parameters
-# Max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
-# Try more boosting iterations and higher shrinkage?
-ggplot(boost_caret, highlight = TRUE)
-
-# Variable importance
-# age, sys_bp, glucose, cigs_per_day
-summary(boost_caret$finalModel, las = 2, cBars = 19, cex.names = 0.6)
-
 # Test data: predicted probabilities
 boost_caret_pred_test_probs = predict(boost_caret, newdata = testing_df, type = "prob",
                                    na.action = na.pass)[,1]
@@ -540,12 +439,6 @@ cart_fit = train(preprocess_recipe,
                    trControl = ctrl,
                    metric = "ROC")
 
-# Optimal tuning parameter
-ggplot(cart_fit, highlight = TRUE)
-
-# Final model
-rpart.plot(cart_fit$finalModel)
-
 # Test data: predicted probabilities
 cart_pred_prob_test = predict(cart_fit, newdata = testing_df,
                        type = "prob")[,1]
@@ -569,13 +462,6 @@ cit_fit = train(preprocess_recipe,
                    tuneGrid = data.frame(mincriterion = 1-exp(seq(-3, 0, length = 50))),
                    metric = "ROC",
                    trControl = ctrl)
-
-# Optimal tuning parameter
-# Re-run with changed mincriterion (tuning parameter)
-ggplot(cit_fit, highlight = TRUE)
-
-# Final model
-plot(cit_fit$finalModel)
 
 # Test data: predicted probabilities
 cit_pred_prob_test = predict(cit_fit, newdata = testing_df,
@@ -611,8 +497,6 @@ svm_linear_fit = train(ten_year_chd ~ .,
                        prob.model = TRUE,
                   preProcess = c("knnImpute", "center", "scale", "BoxCox")
                        )
-
-plot(svm_linear_fit, highlight = TRUE, xTrans = log)
 
 # Test data: predicted probabilities
 svm_linear_pred_prob_test = predict(svm_linear_fit, newdata = testing_df,
@@ -666,11 +550,130 @@ confusionMatrix(data = lda_pred_class_test,
 
 ### Optimal Tuning Parameters
 
-[Insert code chunks here]
+```{r}
+# Optimal tuning parameters: GLMNet
+# Alpha = 0.3, Lambda = 0.0164
+logit_next$bestTune
+
+# Plots of optimal tuning parameters
+myCol = rainbow(15)
+myPar = list(superpose.symbol = list(col = myCol),
+             superpose.line = list(col = myCol))
+
+plot(logit_next, par.settings = myPar, xTrans = function(x) log(x))
+
+logit_tuning_graph = ggplot(logit_next, highlight = T) + 
+  scale_x_continuous(trans = "log") + 
+  labs(title = "Penalized Logistic Regression",
+       x = "Lambda",
+       y = "AUC")
+
+# Optimal tuning parameters RF Recipe: 1 randomly selected predictor, min node size = 10
+# Note: try tuning parameters > 10 min node size in grid?
+ggplot(rf_fit, highlight = TRUE)
+
+# Optimal tuning parameters RF Caret: 1 randomly selected predictor, min node size = 2
+ggplot(rf_caret, highlight = TRUE)
+
+# Optimal tuning parameters Boost Recipe: max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
+# Try more boosting iterations and higher shrinkage?
+ggplot(boost_fit, highlight = TRUE)
+
+# Optimal tuning parameters Boost Caret
+# Max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
+# Try more boosting iterations and higher shrinkage?
+ggplot(boost_caret, highlight = TRUE)
+
+# Optimal tuning parameter CART
+ggplot(cart_fit, highlight = TRUE)
+
+# Optimal tuning parameter CIT
+# Re-run with changed mincriterion (tuning parameter)
+ggplot(cit_fit, highlight = TRUE)
+
+# Optimal tuning parameters SVM linear
+plot(svm_linear_fit, highlight = TRUE, xTrans = log)
+```
 
 ### Variable Importance
 
-[Insert code chunks here]
+```{r}
+# Variable importance: GLMNet
+# Most important variables: age, sys_bp, sexfemale, cigs_per_day
+logit_vip_graph = vip(logit_next, num_features = 20, method = "model")
+
+# Variable importance RF recipe: permutation / gini
+# sys_bp, dia_bp, glucose, prevalent_hyp
+rf_recipe_var_imp_permutation = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_fit$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_fit$bestTune[[3]],
+                           importance = "permutation",
+                           scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf_recipe_var_imp_permutation), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Variable importance RF recipe: impurity / gini
+# sys_bp, age, dia_bp, glucose
+rf_recipe_var_imp_impurity = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_fit$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_fit$bestTune[[3]],
+                           importance = "impurity",
+                           scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf_recipe_var_imp_impurity), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Variable importance RF caret: permutation / gini
+# sys_bp, dia_bp, prevalent_hyp, glucose
+rf_caret_var_imp_permutation = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_caret$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_caret$bestTune[[3]],
+                           importance = "permutation",
+                           scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf_caret_var_imp_permutation), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Variable importance RF caret: impurity / gini
+# sys_bp, age, dia_bp, glucose
+rf_caret_var_imp_impurity = ranger(ten_year_chd ~ ., 
+                           training_df[complete.cases(training_df),],
+                           mtry = rf_caret$bestTune[[1]],
+                           splitrule = "gini",
+                           min.node.size = rf_caret$bestTune[[3]],
+                           importance = "impurity",
+                           scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf_caret_var_imp_impurity), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+
+# Variable importance Boost Recipe
+# age, sys_bp, glucose, cigs_per_day
+summary(boost_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
+# Variable importance Boost Caret
+# age, sys_bp, glucose, cigs_per_day
+summary(boost_caret$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
+# Final model CART
+rpart.plot(cart_fit$finalModel)
+
+# Final model CIT
+plot(cit_fit$finalModel)
+
+```
+
 
 ### Resampling Results and Model Selection
 
