@@ -617,21 +617,6 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
 
 # Still In Progress
 
-```{r SVM linear recipe}
-# SVM with linear kernel, imputation from recipe
-# Doesn't work; will try impute from train function instead
-# set.seed(2022)
-# 
-# svm_linear_fit = train(preprocess_recipe,
-#                        data = training_df,
-#                        method = "svmLinear",
-#                        tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))),
-#                        trControl = ctrl
-#                        )
-# 
-# plot(svm_linear_fit, highlight = TRUE, xTrans = log)
-```
-
 ```{r SVM radial}
 # Trying SVM with radial classifier for fun
 # set.seed(2022)
@@ -652,6 +637,21 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
 #                             tuneGrid = svm_grid,
 #                             trControl = ctrl,
 #                             prob.model = TRUE)
+```
+
+```{r SVM linear recipe}
+# SVM with linear kernel, imputation from recipe
+# Doesn't work; will try impute from train function instead
+# set.seed(2022)
+# 
+# svm_linear_fit = train(preprocess_recipe,
+#                        data = training_df,
+#                        method = "svmLinear",
+#                        tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))),
+#                        trControl = ctrl
+#                        )
+# 
+# plot(svm_linear_fit, highlight = TRUE, xTrans = log)
 ```
 
 ```{r GLMNet with recipe}
