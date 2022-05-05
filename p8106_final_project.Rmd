@@ -49,7 +49,6 @@ knitr::opts_chunk$set(
   message = FALSE,
   cache = TRUE,
   include = FALSE,
-  eval = FALSE, # placed by Tucker to knit EDA
   fig.height = 6,
   fig.width = 8
   )
@@ -135,7 +134,7 @@ Finally, beyond our 15 covariates lies our outcome (response) variable `ten_year
 
 ## EDA Figures
 
-```{r missing data, include = FALSE}
+```{r missing data}
 # Number of rows with any missing data
 rows_missing_data = sum(!complete.cases(cleaned_df))
 
@@ -148,7 +147,7 @@ missing_data_viz = cleaned_df %>%
 
 Notably, 582 rows (13.7% of our observations) lacked at least one data point, with `glucose` accounting for the plurality of missing data (9.15% missing rate). Moving forward, we assume that our data is missing at random, and consequently build a KNN imputation step (using five nearest neighbors) into our preprocessing functionality, which also includes centering, scaling, and BoxCox transformations where possible. 
 
-```{r continuous variable feature plot, include = FALSE, eval = TRUE}
+```{r continuous variable feature plot, eval = TRUE}
 # Distributions of continuous variables factored by outcome
 continuous_vars_df = cleaned_df %>% 
   dplyr::select(age, cigs_per_day, tot_chol, sys_bp, dia_bp, bmi, heart_rate, glucose, ten_year_chd) %>% 
@@ -166,7 +165,7 @@ continuous_explore = continuous_vars_df %>%
   theme(legend.position = "none")
 ```
 
-```{r categorical variable viz, include = FALSE, eval = TRUE}
+```{r categorical variable viz, eval = TRUE}
 # Distributions of categorical variables factored by outcome
 categorical_vars_df = cleaned_df %>% 
   dplyr::select(-age, -cigs_per_day, -tot_chol, -sys_bp, -dia_bp, -bmi, -heart_rate, -glucose) %>% 
@@ -184,7 +183,7 @@ categorical_explore = categorical_vars_df %>%
        color = "10 Year CHD Status")
 ```
 
-```{r combined eda figure, include = TRUE, eval = TRUE}
+```{r combined eda figure, eval = TRUE}
 continuous_explore / categorical_explore + plot_annotation(
   title = "Fig.1: Distributions of Predictors By Outcome Class"
 )
@@ -192,7 +191,7 @@ continuous_explore / categorical_explore + plot_annotation(
 
 When we stratify the distributions of our continuous predictors by outcome status, we find the most substantial differences in median age and systolic blood pressure for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for stroke history, diabetes status, and blood pressure medication status.
 
-```{r correlation plot, include = TRUE, eval = TRUE}
+```{r correlation plot, eval = TRUE}
 model.matrix(~0 + ., data = cleaned_df) %>%
   cor(use = "pairwise.complete.obs") %>% 
   ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 2, title = "Fig.2: Correlation of Predictors")
