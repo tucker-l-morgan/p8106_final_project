@@ -527,7 +527,7 @@ set.seed(2022)
 cit_fit = train(preprocess_recipe,
                   data = training_df,
                    method = "ctree",
-                   tuneGrid = data.frame(mincriterion = 1-exp(seq(-2, -1, length = 50))),
+                   tuneGrid = data.frame(mincriterion = 1-exp(seq(-3, 0, length = 50))),
                    metric = "ROC",
                    trControl = ctrl)
 
