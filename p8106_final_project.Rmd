@@ -217,7 +217,7 @@ In prior work, we attempted to rectify class imbalance through upsampling and do
 
 * **Trees (CIT and CART)**, [TO DO]
 
-* **Support Vector Machine (Linear and Radial Kernels)**, [TO DO]
+* **Support Vector Machine (Linear and Radial Kernels)**, [TO DO -- make sure to mention something about probabilities/ROC being poor metrics for SVM]
 
 * **Neural Network**, [TO DO]
 
@@ -320,15 +320,15 @@ confusionMatrix(data = glmnet_pred_test_class,
 set.seed(2022)
 
 # RF grid
-rf_grid = expand.grid(mtry = 1:8,
+rf_grid_one = expand.grid(mtry = 1:8,
                       splitrule = "gini",
-                      min.node.size = seq(from = 2, to = 10, by = 2))
+                      min.node.size = seq(from = 6, to = 14, by = 2))
 
 # Train random forest model
 rf_fit = train(preprocess_recipe,
               data = training_df,
               method = "ranger",
-              tuneGrid = rf_grid,
+              tuneGrid = rf_grid_one,
               metric = "ROC",
               trControl = ctrl)
 
@@ -385,6 +385,10 @@ ctrl_RF = trainControl(method = "repeatedcv",
                     summaryFunction = twoClassSummary,
                     classProbs = TRUE,
                     preProcOptions = list(k = 5))
+
+rf_grid_two = expand.grid(mtry = 1:8,
+                      splitrule = "gini",
+                      min.node.size = seq(from = 2, to = 10, by = 2))
 
 rf_caret = train(ten_year_chd ~ .,
                    data = training_df,
@@ -445,9 +449,9 @@ confusionMatrix(data = rf_caret_pred_test_class,
 set.seed(2022)
 
 # Grid search for adaboost
-adaboost_grid = expand.grid(n.trees = c(2000,3000,4000,5000),
+adaboost_grid = expand.grid(n.trees = c(4000,5000,6000),
                             interaction.depth = 1:6,
-                            shrinkage = c(0.0005,0.001,0.002),
+                            shrinkage = c(0.001,0.002,0.004),
                             n.minobsinnode = 1)
 
 # Train boosting model
@@ -461,6 +465,7 @@ boost_fit = train(preprocess_recipe,
                   verbose = FALSE)
 
 # Optimal tuning parameters: max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
+# Try more boosting iterations and higher shrinkage?
 ggplot(boost_fit, highlight = TRUE)
 
 # Variable importance
@@ -503,6 +508,7 @@ boost_caret = train(ten_year_chd ~ .,
 
 # Optimal tuning parameters
 # Max tree depth = 1, 5000 boosting iterations, shrinkage = 0.002
+# Try more boosting iterations and higher shrinkage?
 ggplot(boost_caret, highlight = TRUE)
 
 # Variable importance
@@ -565,6 +571,7 @@ cit_fit = train(preprocess_recipe,
                    trControl = ctrl)
 
 # Optimal tuning parameter
+# Re-run with changed mincriterion (tuning parameter)
 ggplot(cit_fit, highlight = TRUE)
 
 # Final model
@@ -657,6 +664,15 @@ confusionMatrix(data = lda_pred_class_test,
                 reference = y_test)
 ```
 
+### Optimal Tuning Parameters
+
+[Insert code chunks here]
+
+### Variable Importance
+
+[Insert code chunks here]
+
+### Resampling Results and Model Selection
 
 ```{r resampling train results}
 # Results from resampling on training data 
@@ -675,6 +691,8 @@ summary(resamp)
 
 bwplot(resamp, layout = c(3, 1))
 ```
+
+### Model Application to Test Data
 
 ```{r auc and roc testing}
 # ROC curves for fitted models applied to testing data
@@ -704,14 +722,18 @@ auc = c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1]
         roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1], roc_cart_impute$auc[1],
         roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_lda$auc[1])
 
-model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Impute", 
-                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Impute", "CIT w/ Impute", "Linear SVM w/ Caret", "LDA w/ Caret")
+model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Caret", 
+                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Recipes", "CIT w/ Recipes", "Linear SVM w/ Caret", "LDA w/ Caret")
 
 legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
        col = 1:9, lwd = 2)
 ```
 
-# Still In Progress
+## Conclusion
+
+TO DO
+
+## Still In Progress
 
 ```{r SVM radial}
 # Trying SVM with radial classifier for fun
