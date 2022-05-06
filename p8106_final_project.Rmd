@@ -341,7 +341,7 @@ rf_caret = train(ten_year_chd ~ .,
                    data = training_df,
                    na.action = na.pass,
                   method = "ranger",
-                  tuneGrid = rf_grid,
+                  tuneGrid = rf_grid_two,
                   metric = "ROC",
                   trControl = ctrl_RF,
                   preProcess = c("knnImpute", "center", "scale", "BoxCox"))
@@ -555,7 +555,7 @@ confusionMatrix(data = lda_pred_class_test,
 # Alpha = 0.3, Lambda = 0.0164
 logit_next$bestTune
 
-# Plots of optimal tuning parameters
+# Plots of optimal tuning parameters for GLMnet
 myCol = rainbow(15)
 myPar = list(superpose.symbol = list(col = myCol),
              superpose.line = list(col = myCol))
