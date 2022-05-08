@@ -104,21 +104,22 @@ y_train = training_df$ten_year_chd
 y_test = testing_df$ten_year_chd
 
 # Train control with 10-fold cross-validation repeated 5 times
-ctrl = trainControl(method = "repeatedcv",
-                    repeats = 5,
-                    summaryFunction = twoClassSummary,
-                    classProbs = TRUE)
+ctrl_radial_svm = trainControl(method = "repeatedcv",
+                               repeats = 5,
+                               summaryFunction = twoClassSummary,
+                               classProbs = TRUE,
+                               preProcOptions = list(k = 5))
 ```
 
 ```{r downsampling for radial SVM}
 set.seed(2022)
 down_ind <- createDataPartition(training_df$ten_year_chd,
-                                p = 0.1,
+                                p = 0.15,
                                 list = FALSE)
 down_df <- training_df[down_ind,]
 ```
 
-```{r recipe preprocessing}
+```{r recipe preprocessing, eval = FALSE}
 # Preprocessing and feature engineering with recipe (including imputation)
 # Note: assuming data is MAR
 
@@ -139,18 +140,25 @@ set.seed(2022)
 svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
                        sigma = exp(seq(-3, 0, len = 50)))
 
-svm_fit_impute_classes = train(preprocess_recipe,
-                               data = down_df,
-                               method = "svmRadialSigma",
-                               tuneGrid = svm_grid,
-                               trControl = ctrl)
-
 # I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
-svm_fit_impute_probs = train(preprocess_recipe,
-                            data = training_df,
-                            method = "svmRadialSigma",
-                            tuneGrid = svm_grid,
-                            trControl = ctrl,
-                            prob.model = TRUE)
+svm_fit_impute_probs = train(ten_year_chd ~ .,
+                             data = down_df,
+                             method = "svmRadialSigma",
+                             tuneGrid = svm_grid,
+                             trControl = ctrl_radial_svm,
+                             prob.model = TRUE,
+                             na.action = na.pass,
+                             preProcess = c("knnImpute", "center", "scale", "BoxCox"))
+plot(svm_fit_impute_probs, transform.y = log,
+     transform.x = log, color.palette = terrain.colors)
+svm_radial_pred_prob_test = predict(svm_fit_impute_probs, newdata = testing_df,
+                       type = "prob", na.action = na.pass)[,1]
+svm_radial_pred_class_test = predict(svm_fit_impute_probs, newdata = testing_df, type = "raw",
+                                     na.action = na.pass)
+confusionMatrix(data = svm_radial_pred_class_test,
+                reference = y_test)
+
+svm_radial_fit_impute <- svm_fit_impute_probs
+save(svm_radial_fit_impute, svm_radial_pred_prob_test, svm_radial_pred_class_test, file = "svm_radial_res.RData")
 ```
 
