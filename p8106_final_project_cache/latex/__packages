@@ -30,7 +30,6 @@ Hmisc
 groupdata2
 reshape
 recipes
-base
 Matrix
 glmnet
 rpart
