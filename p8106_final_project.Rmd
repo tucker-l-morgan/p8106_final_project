@@ -723,7 +723,7 @@ plot(cit_fit$finalModel)
 
 ### Resampling Results and Model Selection
 
-```{r resampling train results}
+```{r resampling train results, include = TRUE}
 # Results from resampling on training data 
 resamp = resamples(list(random_forest_recipes_impute = rf_fit, 
                          adaboost_recipes_impute = boost_fit,
@@ -744,7 +744,7 @@ bwplot(resamp, layout = c(3, 1))
 
 ### Model Application to Test Data
 
-```{r auc and roc testing}
+```{r auc and roc testing, include = TRUE}
 # ROC curves for fitted models applied to testing data
 # AUC is highest for glmnet and boost_caret_impute (0.74 for both)
 
