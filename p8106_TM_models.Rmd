@@ -1,0 +1,156 @@
+---
+title: "TM Models"
+author: "Tucker Morgan - tlm2152"
+date: "5/5/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(caret)
+library(recipes)
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  cache = TRUE,
+  fig.height = 6,
+  fig.width = 8
+  )
+
+theme_set(theme_minimal() + theme(
+  legend.position = "bottom",
+  plot.title = element_text(hjust = 0.5)
+))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis",
+  digits = 3)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+```{r data import and cleaning - copied}
+all_df = read_csv("FHS.csv")
+
+# Factor labels for categorical variables and other recoding
+cleaned_df = all_df %>% 
+  mutate(male = factor(male),
+         current_smoker = factor(current_smoker),
+         bp_meds = factor(bp_meds),
+         prevalent_stroke = factor(prevalent_stroke),
+         prevalent_hyp = factor(prevalent_hyp),
+         diabetes = factor(diabetes),
+         ten_year_chd = factor(ten_year_chd))  %>%
+  mutate(ten_year_chd = ifelse(ten_year_chd == "1", "CHD_present","CHD_absent") %>%
+           fct_relevel("CHD_present", "CHD_absent")) %>%
+  dplyr::rename(sex = male) %>%
+  mutate(sex = ifelse(sex == "1", "male","female") %>%
+           fct_relevel("male", "female")) %>% 
+  mutate(
+    education = case_when(
+      education == "1" ~ "some_HS",
+      education == "2" ~ "HS_grad",
+      education == "3" ~ "some_college",
+      education == "4" ~ "college_grad"
+    ),
+    current_smoker = recode(
+      current_smoker,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    bp_meds = recode(
+      bp_meds,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_stroke = recode(
+      prevalent_stroke,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    prevalent_hyp = recode(
+      prevalent_hyp,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    diabetes = recode(
+      diabetes,
+      "1" = "yes",
+      "0" = "no"
+    ),
+    education = factor(education, levels = c("some_HS", "HS_grad", "some_college", "college_grad"))
+  )
+```
+
+```{r model tuning setup}
+set.seed(2022)
+
+# Training/testing partition
+index_train = createDataPartition(cleaned_df$ten_year_chd, 
+                                  p = 0.8,
+                                  list = FALSE)
+
+training_df = cleaned_df[index_train, ]
+testing_df = cleaned_df[-index_train, ]
+
+# Model matrices
+x_train = model.matrix(ten_year_chd ~ ., training_df)[, -1] # Note that if a row has NAs, it is by default removed using model.matrix!
+x_test = model.matrix(ten_year_chd ~ ., testing_df)[, -1]
+y_train = training_df$ten_year_chd
+y_test = testing_df$ten_year_chd
+
+# Train control with 10-fold cross-validation repeated 5 times
+ctrl = trainControl(method = "repeatedcv",
+                    repeats = 5,
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE)
+```
+
+```{r downsampling for radial SVM}
+set.seed(2022)
+down_ind <- createDataPartition(training_df$ten_year_chd,
+                                p = 0.1,
+                                list = FALSE)
+down_df <- training_df[down_ind,]
+```
+
+```{r recipe preprocessing}
+# Preprocessing and feature engineering with recipe (including imputation)
+# Note: assuming data is MAR
+
+# recipe of preprocessing steps
+preprocess_recipe = recipe(ten_year_chd ~ ., data = down_df) %>%
+  step_impute_knn(all_predictors(), neighbors = 5) %>%  # KNN imputation based on 5 nearest neighbors
+  step_BoxCox(all_numeric_predictors()) %>% # transform predictors
+  step_center(all_numeric_predictors()) %>% # center and scale numeric predictors
+  step_scale(all_numeric_predictors())
+```
+
+## SVM Radial
+
+```{r performing radial svm}
+# Trying SVM with radial classifier for fun
+set.seed(2022)
+
+svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
+                       sigma = exp(seq(-3, 0, len = 50)))
+
+svm_fit_impute_classes = train(preprocess_recipe,
+                               data = down_df,
+                               method = "svmRadialSigma",
+                               tuneGrid = svm_grid,
+                               trControl = ctrl)
+
+# I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
+svm_fit_impute_probs = train(preprocess_recipe,
+                            data = training_df,
+                            method = "svmRadialSigma",
+                            tuneGrid = svm_grid,
+                            trControl = ctrl,
+                            prob.model = TRUE)
+```
+

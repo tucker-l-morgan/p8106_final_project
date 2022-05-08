@@ -512,6 +512,48 @@ confusionMatrix(data = svm_linear_pred_class_test,
                 reference = y_test)
 ```
 
+```{r loading svm radial results}
+load("svm_radial_res.RData")
+```
+
+```{r SVM radial caret impute, eval = FALSE}
+# Train control with 10-fold cross-validation repeated 5 times
+ctrl_radial_svm = trainControl(method = "repeatedcv",
+                               repeats = 5,
+                               summaryFunction = twoClassSummary,
+                               classProbs = TRUE,
+                               preProcOptions = list(k = 5))
+
+# down-sampling for radial svm
+set.seed(2022)
+down_ind <- createDataPartition(training_df$ten_year_chd,
+                                p = 0.15,
+                                list = FALSE)
+down_df <- training_df[down_ind,]
+
+# Trying SVM with radial classifier for fun
+set.seed(2022)
+
+svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
+                       sigma = exp(seq(-3, 0, len = 50)))
+
+# I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
+svm_radial_fit_impute = train(ten_year_chd ~ .,
+                             data = down_df,
+                             method = "svmRadialSigma",
+                             tuneGrid = svm_grid,
+                             trControl = ctrl_radial_svm,
+                             prob.model = TRUE,
+                             na.action = na.pass,
+                             preProcess = c("knnImpute", "center", "scale", "BoxCox"))
+
+svm_radial_pred_prob_test = predict(svm_fit_impute_probs, newdata = testing_df,
+                       type = "prob", na.action = na.pass)[,1]
+
+svm_radial_pred_class_test = predict(svm_fit_impute_probs, newdata = testing_df, type = "raw",
+                                     na.action = na.pass)
+```
+
 ```{r LDA}
 # LDA in caret, imputation from caret (recipes gives errors, non-numeric argument to binary operator)
 set.seed(2022)
@@ -593,6 +635,10 @@ ggplot(cit_fit, highlight = TRUE)
 
 # Optimal tuning parameters SVM linear
 plot(svm_linear_fit, highlight = TRUE, xTrans = log)
+
+# Optimal tuning parameters SVM radial
+plot(svm_radial_fit_impute, transform.y = log,
+     transform.x = log)
 ```
 
 ### Variable Importance
@@ -687,6 +733,7 @@ resamp = resamples(list(random_forest_recipes_impute = rf_fit,
                         cart_tree = cart_fit,
                         cit_tree = cit_fit,
                         svm_linear = svm_linear_fit,
+                        svm_radial = svm_radial_fit_impute,
                         lda = LDA_model_caret))
 
 # Median AUC is highest for glmnet (0.727), and boost_caret_impute (0.722)                   
@@ -709,6 +756,7 @@ roc_boost_caret_impute = roc(y_test, boost_caret_pred_test_probs)
 roc_cart_impute = roc(y_test, cart_pred_prob_test)
 roc_cit_impute = roc(y_test, cit_pred_prob_test)
 roc_svm_linear_impute = roc(y_test, svm_linear_pred_prob_test)
+roc_svm_radial_impute = roc(y_test, svm_radial_pred_prob_test)
 roc_lda = roc(y_test, lda_pred_prob_test)
 
 plot(roc_rf_recipes_impute, col = 1)
@@ -719,14 +767,17 @@ plot(roc_boost_caret_impute, add = TRUE, col = 5)
 plot(roc_cart_impute, add = TRUE, col = 6)
 plot(roc_cit_impute, add = TRUE, col = 7)
 plot(roc_svm_linear_impute, add = TRUE, col = 8)
-plot(roc_lda, add = TRUE, col = 9)
+plot(roc_svm_radial_impute, add = TRUE, col = 9)
+plot(roc_lda, add = TRUE, col = 10)
 
 auc = c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], 
         roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1], roc_cart_impute$auc[1],
-        roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_lda$auc[1])
+        roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_svm_radial_impute$auc[1],
+        roc_lda$auc[1])
 
 model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Caret", 
-                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Recipes", "CIT w/ Recipes", "Linear SVM w/ Caret", "LDA w/ Caret")
+                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Recipes", "CIT w/ Recipes", 
+                "Linear SVM w/ Caret", "Radial SVM w/ Caret", "LDA w/ Caret")
 
 legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
        col = 1:9, lwd = 2)
