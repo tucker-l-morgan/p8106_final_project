@@ -621,10 +621,9 @@ testing_df = cleaned_df[-index_train, ]
 training_df_na_omit <- training_df %>%  na.omit()
 testing_df_na_omit <- testing_df %>% na.omit()
 
-#Train control with 10-fold cross-validation
-#Used 10-fold CV b/c fitting models takes too long - Hun
-ctrl = trainControl(method = "cv",
-                    number = 10,
+#Train control with 10-fold cross-validation repeated 5 times
+ctrl = trainControl(method = "repeatedcv",
+                    repeats = 5,
                     summaryFunction = twoClassSummary,
                     classProbs = TRUE)
 ```
