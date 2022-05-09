@@ -42,6 +42,12 @@ library(recipes)
 library(glmnet)
 library(rpart.plot)
 library(MASS)
+library(glmnet)
+library(nnet)
+library(xgboost)
+library(NeuralNetTools)  
+library(Ckmeans.1d.dp)
+library(kableExtra)
 
 knitr::opts_chunk$set(
   echo = TRUE,
@@ -590,6 +596,212 @@ confusionMatrix(data = lda_pred_class_test,
                 reference = y_test)
 ```
 
+
+
+```{r model tuning setup full data set}
+### Using Zak's cleaned_df but I created two partitions, one for without NA, another with NA.
+
+## NA omitted data set
+cleaned_df_na_omit <- cleaned_df %>% na.omit()
+
+# Training/testing partition
+set.seed(2022)
+index_train = createDataPartition(cleaned_df$ten_year_chd, 
+                                  p = 0.8,
+                                  list = FALSE)
+
+set.seed(2022)
+index_train_na_omit = createDataPartition(cleaned_df_na_omit$ten_year_chd, 
+                                          p = 0.8,
+                                          list = FALSE)
+
+training_df = cleaned_df[index_train, ]
+testing_df = cleaned_df[-index_train, ]
+
+training_df_na_omit <- training_df %>%  na.omit()
+testing_df_na_omit <- testing_df %>% na.omit()
+
+#Train control with 10-fold cross-validation
+#Used 10-fold CV b/c fitting models takes too long - Hun
+ctrl = trainControl(method = "cv",
+                    number = 10,
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE)
+```
+
+```{r}
+### Neural Network Model
+set.seed(2022)
+nnet_fit <- train(ten_year_chd~.,
+                  data = training_df_na_omit,
+                  method = "nnet",
+                  tuneGrid =  expand.grid(decay = exp(seq(-1, 2.5, len = 15)),  
+                                          size = c(1:5)),
+                  metric = "ROC",
+                  preProcess = c("center", "scale", "BoxCox"),
+                  trControl = ctrl)
+
+#Note that when we don't impute the model, we should use testing data without missing values
+nnet_pred_test_probs <- predict(nnet_fit, newdata = testing_df_na_omit, type = "prob")[,1]
+```
+
+```{r}
+### Neural Network Model with imputation
+nnet_fit_impute <- train(preprocess_recipe,
+                         data = training_df,
+                         method = "nnet",
+                         tuneGrid =  expand.grid(decay = exp(seq(-1, 2.5, len = 15)),  
+                                                 size = c(1:5)),
+                         metric = "ROC",
+                         trControl = ctrl)
+
+#Note that when we impute the model, we should use testing data with missing values (NA)
+nnet_impute_pred_test_probs <- predict(nnet_fit_impute, newdata = testing_df, type = "prob")[,1]
+```
+
+```{r}
+### Averaged Neural Network Model
+#library(nnet)
+#Fitting Model Averaged Neural Network
+#Tuning parameters:
+#size (#Hidden Units)
+#decay (Weight Decay)
+#bag (Bagging)
+
+my.grid <- expand.grid(decay = seq(0, 0.001, 0.0001), 
+                       size = c(1:7), 
+                       bag = TRUE)
+
+# get the maximum number of hidden units
+maxSize <- max(my.grid$size)
+
+# compute the maximum number of parameters
+# there are M(p+1)+M+1 parameters in total, excluding outcome variable
+numWts <- 1*(maxSize * (length(training_df_na_omit) -1 + 1) + maxSize + 1)
+
+set.seed(2022)
+avnet_fit <- train(ten_year_chd ~ .,
+                   data = training_df_na_omit,
+                   method = "avNNet",
+                   MaxNWts = numWts, #maximum allowable weights
+                   maxit = 1000, 
+                   tuneGrid = my.grid, 
+                   trace = FALSE, 
+                   metric = "ROC",
+                   preProcess = c("center", "scale", "BoxCox"),
+                   trControl = ctrl)  
+
+avnnet_pred_test_probs <- predict(avnet_fit, newdata = testing_df_na_omit, type = "prob")[,1]
+```
+
+
+```{r}
+### Averaged Neural Network Model with imputation
+
+set.seed(2022)
+avnet_fit_impute <- train(preprocess_recipe,
+                          data = training_df,
+                          method = "avNNet",
+                          MaxNWts = numWts, #maximum allowable weights
+                          maxit = 1000, 
+                          tuneGrid = my.grid, 
+                          trace = FALSE, 
+                          metric = "ROC",
+                          trControl = ctrl)
+
+avnnet_impute_pred_test_probs <- predict(avnet_fit_impute, newdata = testing_df, type = "prob")[,1]
+```
+
+```{r}
+###  Extreme Gradient Boosting Model
+#Fitting Extreme Gradient Boosting
+#library(xgboost)
+#Tuning PARAMETERS:
+#nrounds (# Boosting Iterations)
+#lambda (L2 Regularization)
+#alpha (L1 Regularization)
+#eta (Learning Rate)
+
+set.seed(2022)
+xgbGrid <- expand.grid(nrounds = c(1:15), 
+                       lambda = exp(seq(-1, 2, len = 10)) %>% round(digits = 0),
+                       alpha = exp(seq(-1, 2, len = 10)) %>% round(digits = 0),
+                       eta = c(0.00001, 0.0001, 0.001))
+
+x_gradient_boost_fit <- train(ten_year_chd ~ .,
+                               data = training_df_na_omit, 
+                               method = "xgbLinear", 
+                               tuneGrid = xgbGrid,
+                               metric = "ROC", 
+                               preProcess = c("center", "scale", "BoxCox"),
+                               trControl = ctrl)
+
+xgb_impute_pred_test_probs <- 
+  predict(ex_gradient_boost_fit, newdata = testing_df_na_omit, type = "prob")[,1]
+```
+
+
+```{r}
+### MARS Model
+set.seed(2022)
+mars_fit <- train(ten_year_chd~.,
+                   data = training_df_na_omit,
+                   method = "earth",
+                   tuneGrid = expand.grid(degree = 1:3, 
+                                          nprune = 2:35),
+                   metric = "ROC",
+                   preProcess = c("center", "scale", "BoxCox"),
+                   trControl = ctrl)
+
+mars_pred_test_probs <- predict(mars_fit, newdata = testing_df_na_omit, type = "prob")[,1]
+```
+
+
+```{r}
+### MARS Model with imputation
+set.seed(2022)
+mars_fit_impute <- train(preprocess_recipe,
+                         data = training_df,
+                         method = "earth",
+                         tuneGrid = expand.grid(degree = 1:3, 
+                                                nprune = 2:35),
+                         metric = "ROC",
+                         trControl = ctrl)
+
+mars_impute_pred_test_probs <- predict(mars_fit_impute, newdata = testing_df, type = "prob")[,1]
+```
+
+
+```{r}
+### GAM Model
+GAM_fit <- train(ten_year_chd~.,
+                  data = training_df_na_omit,
+                  method = "gam",
+                  metric = "ROC",
+                  family = "binomial",
+                  preProcess = c("center", "scale", "BoxCox"),
+                  tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE, FALSE)),
+                  trControl = ctrl)
+
+gam_pred_test_probs <- predict(GAM_fit, newdata = testing_df_na_omit, type = "prob")[,1]
+```
+
+
+```{r'}
+### GAM Model with imputation
+set.seed(2022)
+
+GAM_fit_impute <- train(preprocess_recipe,
+                        data = training_df,
+                        method = "gam",
+                        metric = "ROC",
+                        family = "binomial",
+                        tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE, FALSE)),
+                        trControl = ctrl)
+
+gam_impute_pred_test_probs <- predict(GAM_fit_impute, newdata = testing_df, type = "prob")[,1]
+```
+
 ### Optimal Tuning Parameters
 
 ```{r}
@@ -639,6 +851,20 @@ plot(svm_linear_fit, highlight = TRUE, xTrans = log)
 # Optimal tuning parameters SVM radial
 plot(svm_radial_fit_impute, transform.y = log,
      transform.x = log)
+
+# Optimal tuning parameters Neural Network
+ggplot(nnet_fit, highlight = T)
+
+# Optimal tuning parameters Averaged Neural Network
+ggplot(avnet_fit, highlight = T)
+
+# Optimal tuning parameters Extreme Gradient Boosting Model
+ggplot(x_gradient_boost_fit, highlight = T)
+
+# Optimal tuning parameters MARS
+ggplot(mars_fit, highlight = T)
+
+# GAM tuning parameter plot looks like an empty plot (professor also doesn't include in her code)
 ```
 
 ### Variable Importance
@@ -718,6 +944,64 @@ rpart.plot(cart_fit$finalModel)
 # Final model CIT
 plot(cit_fit$finalModel)
 
+# Variable importance Neural Network
+V <- varImp(nnet_fit$finalModel)
+
+ggplot(V, aes(x = reorder(rownames(V),Overall), y = Overall)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +
+  geom_segment(aes(x = rownames(V), xend = rownames(V), y = 0, yend = Overall), 
+              color = 'skyblue') +
+  xlab('Variable') +
+  ylab('Overall Importance') +
+  theme_light() +
+  coord_flip() 
+
+# Neural Network model plot
+plotnet(nnet_fit)
+
+# Variable importance Averaged Neural Network
+names <- avnet_fit$coefnames
+V2 = varImp(avnet_fit$finalModel)
+rownames(V2) <- c(names[1], names[10], names[11], names[12], names[13], names[14],
+                 names[15], names[16], names[17], names[2], names[3], names[4],
+                 names[5], names[6], names[7], names[8], names[9])
+
+ggplot(V2, aes(x = reorder(rownames(V2),Overall), y = Overall)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +
+  geom_segment(aes(x = rownames(V2), xend = rownames(V2), y = 0, yend = Overall), 
+              color = 'skyblue') +
+  xlab('Variable') +
+  ylab('Overall Importance') +
+  theme_light() +
+  coord_flip() 
+
+# Variable importance Extreme Gradient Boosting Model
+importance_df <- xgb.importance(model = x_gradient_boost_fit$finalModel)
+xgb.ggplot.importance(importance_df, top_n = 15, measure = "Gain")
+
+# Variable importance MARS
+V3 <- varImp(mars_fit$finalModel)
+
+ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +
+  geom_segment(aes(x = rownames(V3), xend = rownames(V3), y = 0, yend = Overall), 
+              color = 'skyblue') +
+  xlab('Variable') +
+  ylab('Overall Importance') +
+  theme_light() +
+  coord_flip()
+
+# Variable importance GAM
+V4 <- varImp(GAM_fit$finalModel)
+
+ggplot(V4, aes(x = reorder(rownames(V4),Overall), y = Overall)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +
+  geom_segment(aes(x = rownames(V4), xend = rownames(V4), y = 0, yend = Overall), 
+              color = 'skyblue') +
+  xlab('Variable') +
+  ylab('Overall Importance') +
+  theme_light() +
+  coord_flip()
 ```
 
 
@@ -726,7 +1010,7 @@ plot(cit_fit$finalModel)
 ```{r resampling train results, include = TRUE}
 # Results from resampling on training data 
 resamp = resamples(list(random_forest_recipes_impute = rf_fit, 
-                         adaboost_recipes_impute = boost_fit,
+                        adaboost_recipes_impute = boost_fit,
                         glmnet = logit_next,
                         random_forest_caret_impute = rf_caret,
                         boost_caret_impute = boost_caret,
@@ -734,7 +1018,16 @@ resamp = resamples(list(random_forest_recipes_impute = rf_fit,
                         cit_tree = cit_fit,
                         svm_linear = svm_linear_fit,
                         svm_radial = svm_radial_fit_impute,
-                        lda = LDA_model_caret))
+                        lda = LDA_model_caret,
+                        Neural_Network = nnet_fit,
+                        Neural_Network_Impute = nnet_fit_impute,
+                        Aveeraged_Neural_Network = avnet_fit,
+                        Aveeraged_Neural_Network_Impute = avnet_fit_impute,
+                        Extreme_Gradient_Boosting = ex_gradient_boost_fit,
+                        MARS = mars_fit,
+                        MARS_Impute = mars_fit_impute,
+                        GAM = GAM_fit,
+                        GAM_Impute = GAM_fit_impute))
 
 # Median AUC is highest for glmnet (0.727), and boost_caret_impute (0.722)                   
 summary(resamp)
@@ -759,6 +1052,16 @@ roc_svm_linear_impute = roc(y_test, svm_linear_pred_prob_test)
 roc_svm_radial_impute = roc(y_test, svm_radial_pred_prob_test)
 roc_lda = roc(y_test, lda_pred_prob_test)
 
+roc_nnet <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
+roc_nnet_impute <- roc(testing_df$ten_year_chd, glm.pred)
+roc_avnnet <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
+roc_avnnet_impute <- roc(testing_df$ten_year_chd, glm.pred)
+xgb_roc <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
+roc_mars <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
+roc_mars_impute <- roc(testing_df$ten_year_chd, glm.pred)
+roc_gam <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
+roc_gam_impute <- roc(testing_df$ten_year_chd, glm.pred)
+
 plot(roc_rf_recipes_impute, col = 1)
 plot(roc_boost_impute, add = TRUE, col = 2)
 plot(roc_glmnet, add = TRUE, col = 3)
@@ -769,18 +1072,32 @@ plot(roc_cit_impute, add = TRUE, col = 7)
 plot(roc_svm_linear_impute, add = TRUE, col = 8)
 plot(roc_svm_radial_impute, add = TRUE, col = 9)
 plot(roc_lda, add = TRUE, col = 10)
+plot(roc_nnet, add = TRUE, col = 11)
+plot(roc_nnet_impute, add = TRUE, col = 12)
+plot(roc_avnnet, add = TRUE, col = 13)
+plot(roc_avnnet_impute, add = TRUE, col = 14)
+plot(xgb_roc, add = TRUE, col = 15)
+plot(roc.mars, add = TRUE, col = 16)
+plot(roc_mars_impute, add = TRUE, col = 17)
+plot(roc_gam, add = TRUE, col = 18)
+plot(roc_gam_impute, add = TRUE, col = 19)
 
-auc = c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], 
-        roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1], roc_cart_impute$auc[1],
-        roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_svm_radial_impute$auc[1],
-        roc_lda$auc[1])
+auc <- sort(c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], roc_glmnet$auc[1], 
+              roc_rf_caret_impute$auc[1], roc_boost_caret_impute$auc[1], roc_cart_impute$auc[1],
+              roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_svm_radial_impute$auc[1],
+              roc_lda$auc[1], roc.nnet$auc[1], roc.nnet.impute$auc[1], roc.avnnet$auc[1], 
+              roc.avnnet.impute$auc[1], egb.roc$auc[1], roc.mars$auc[1],
+              roc.mars.impute$auc[1], roc.gam$auc[1], roc.gam.impute$auc[1]), decreasing = TRUE)
 
 model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Caret", 
                 "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Recipes", "CIT w/ Recipes", 
-                "Linear SVM w/ Caret", "Radial SVM w/ Caret", "LDA w/ Caret")
+                "Linear SVM w/ Caret", "Radial SVM w/ Caret", "LDA w/ Caret", 
+                "Neural Network","Neural Network Impute","Averaged Neural Network", 
+                "Averaged Neural Network Impute", "Extreme Gradient Boosting",
+                "MARS", "MARS Impute", "GAM", "GAM Impute")
 
 legend("bottomright", legend = paste0(model_names, ": ", round(auc, 3)),
-       col = 1:9, lwd = 2)
+       col = 1:19, lwd = 2)
 ```
 
 ## Conclusion
