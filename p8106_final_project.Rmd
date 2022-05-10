@@ -649,7 +649,7 @@ mars_impute_pred_test_probs <- predict(mars_fit_impute, newdata = testing_df, ty
 ```
 
 
-```{r'}
+```{r}
 ### GAM Model with imputation
 set.seed(2022)
 
@@ -912,7 +912,8 @@ resamp = resamples(list(Random_Forest = rf_fit,
                         SVM_Radial = svm_radial_fit_impute,
                         LDA = LDA_model_caret,
                         Neural_Network = nnet_fit_impute,
-                        MARS = mars_fit_impute))
+                        MARS = mars_fit_impute,
+                        GAM = GAM_fit_impute))
 
 # Median AUC is highest for glmnet (0.727), and boost_caret_impute (0.722)                   
 result <- summary(resamp) 
@@ -927,8 +928,9 @@ ROC_df <-
          SVM_Radial = result$values$`SVM_Radial~ROC`,
          LDA = result$values$`LDA~ROC`,
          Neural_Network = result$values$`Neural_Network~ROC`,
-         MARS = result$values$`MARS~ROC`) %>% 
-  pivot_longer(Random_Forest:MARS, names_to = "method", values_to = "values")
+         MARS = result$values$`MARS~ROC`,
+         GAM = result$values$`GAM~ROC`) %>% 
+  pivot_longer(Random_Forest:GAM, names_to = "method", values_to = "values")
 
 plot_result <-
   ROC_df %>% 
@@ -976,30 +978,30 @@ roc_svm_radial_impute = roc(y_test, svm_radial_pred_prob_test)
 roc_lda = roc(y_test, lda_pred_prob_test)
 roc_nnet_impute <- roc(y_test, nnet_impute_pred_test_probs)
 roc_mars_impute <- roc(y_test, mars_impute_pred_test_probs)
-#roc_gam_impute <- roc(y_test, gam_impute_pred_test_probs)
+roc_gam_impute <- roc(y_test, gam_impute_pred_test_probs)
 
 P36 = createPalette(36,  c("#ff0000", "#00ff00", "#0000ff"))
 
-plot(roc_rf_recipes_impute, col = P36[14])
-plot(roc_boost_impute, add = TRUE, col = P36[15])
-plot(roc_glmnet, add = TRUE, col = P36[16])
-plot(roc_cart_impute, add = TRUE, col = P36[17])
-plot(roc_cit_impute, add = TRUE, col = P36[18])
-plot(roc_svm_linear_impute, add = TRUE, col = P36[19])
-plot(roc_svm_radial_impute, add = TRUE, col = P36[20])
-plot(roc_lda, add = TRUE, col = P36[21])
-plot(roc_nnet_impute, add = TRUE, col = P36[22])
-plot(roc_mars_impute, add = TRUE, col = P36[23])
-#plot(roc_gam_impute, add = TRUE, col = 13)
+plot(roc_rf_recipes_impute, col = P36[20])
+plot(roc_boost_impute, add = TRUE, col = P36[19])
+plot(roc_glmnet, add = TRUE, col = P36[15])
+plot(roc_cart_impute, add = TRUE, col = P36[22])
+plot(roc_cit_impute, add = TRUE, col = P36[21])
+plot(roc_svm_linear_impute, add = TRUE, col = P36[24])
+plot(roc_svm_radial_impute, add = TRUE, col = P36[23])
+plot(roc_lda, add = TRUE, col = P36[18])
+plot(roc_nnet_impute, add = TRUE, col = P36[16])
+plot(roc_mars_impute, add = TRUE, col = P36[14])
+plot(roc_gam_impute, add = TRUE, col = 17)
 
 auc <- sort(c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], 
               roc_glmnet$auc[1], roc_cart_impute$auc[1],
               roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_svm_radial_impute$auc[1],
-              roc_lda$auc[1], roc_nnet_impute$auc[1], roc_mars_impute$auc[1]), 
+              roc_lda$auc[1], roc_nnet_impute$auc[1], roc_mars_impute$auc[1],roc_gam_impute$auc[1]),
             decreasing = TRUE)
-#roc.gam.impute$auc[1]
 
-model_names = c("MARS", "Elastic Net", "Neural Network", "LDA", 
+
+model_names = c("MARS", "Elastic Net", "Neural Network","GAM", "LDA", 
                 "Adaboost", "Random Forest", "Conditional Inference Tree", 
                 "Classification Tree","Radial SVM", "Linear SVM")
 
@@ -1012,7 +1014,7 @@ model_names = c("MARS", "Elastic Net", "Neural Network", "LDA",
 #"GAM Impute"
 
 legend("bottomright", legend = paste0(model_names, ": ", round(auc,4)),
-       col = P36[14:23], lwd = 2)
+       col = P36[14:24], lwd = 2)
 ```
 
 ## Conclusion
