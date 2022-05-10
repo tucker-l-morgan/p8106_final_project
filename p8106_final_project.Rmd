@@ -49,6 +49,7 @@ library(NeuralNetTools)
 library(Ckmeans.1d.dp)
 library(kableExtra)
 library(Polychrome)
+library(cowplot)
 
 knitr::opts_chunk$set(
   echo = TRUE,
@@ -216,13 +217,16 @@ categorical_explore = categorical_vars_df %>%
 
 When we stratify the distributions of our continuous predictors by outcome status, we find the most substantial differences in median age, systolic blood pressure, glucose, and daily cigarette consumption for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for stroke history, diabetes status, blood pressure medication status, and hypertension prevalence. 
 
-```{r correlation plot, eval = FALSE, include = TRUE, echo = TRUE, fig.width=10, fig.height=7}
+```{r correlation plot, eval = FALSE, echo = TRUE, fig.width=10, fig.height=7}
 corr_plot <- model.matrix(~0 + ., data = cleaned_df) %>%
   cor(use = "pairwise.complete.obs") %>% 
   ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 1)
 
 missing_data_viz + corr_plot + plot_annotation(title = "Fig. X: Missing Data and Correlation of Predictors")
 ```
+
+
+![](Fig.2.jpg){width=110%}
 
 We observe no major multicollinearities, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
 
@@ -775,12 +779,12 @@ The most important variables in our elastic net model were age, systolic blood p
 
 Overall, we tended to see the following variables as being important across our analysis: systolic blood pressure, age, glucose, and sex. This is perhaps unsurprising given our exploratory data analysis and relatively better class separability for these features than for others.
 
-```{r, include = TRUE, echo = FALSE}
+```{r}
 # Variable importance: GLMNet
 # Most important variables: age, sys_bp, sexfemale, cigs_per_day
 logit_vip_graph = vip(logit_next, num_features = 11, method = "model",
-                      aesthetics = list(palette = "skyblue"))
-logit_vip_graph
+                      aesthetics = list(fill = "skyblue")) + ggtitle("Elastic Net VIP")
+g3 <- logit_vip_graph
 
 # Variable importance RF recipe: permutation / gini
 # sys_bp, dia_bp, glucose, prevalent_hyp
@@ -793,8 +797,9 @@ rf_recipe_var_imp_permutation = ranger(ten_year_chd ~ .,
                            scale.permutation.importance = TRUE)
 
 barplot(sort(ranger::importance(rf_recipe_var_imp_permutation), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+                las = 2, horiz = TRUE, cex.names = 0.7,
+                col = colorRampPalette(colors = c("cyan", "blue"))(12), 
+                main = "Random Forest Permutation VIP")
 
 # Variable importance RF recipe: impurity / gini
 # sys_bp, age, dia_bp, glucose
@@ -808,7 +813,8 @@ rf_recipe_var_imp_impurity = ranger(ten_year_chd ~ .,
 
 barplot(sort(ranger::importance(rf_recipe_var_imp_impurity), decreasing = FALSE),
         las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+        col = colorRampPalette(colors = c("cyan", "blue"))(12), main = "Random Forest Impurity VIP")
+
 
 # Variable importance RF caret: permutation / gini
 # sys_bp, dia_bp, prevalent_hyp, glucose
@@ -840,11 +846,14 @@ barplot(sort(ranger::importance(rf_recipe_var_imp_impurity), decreasing = FALSE)
 
 # Variable importance Boost Recipe
 # age, sys_bp, glucose, cigs_per_day
-summary(boost_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
 # Variable importance Boost Caret
 # age, sys_bp, glucose, cigs_per_day
 #summary(boost_caret$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
+
+summary(boost_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
 
 # Final model CART
 rpart.plot(cart_fit$finalModel)
@@ -853,8 +862,9 @@ rpart.plot(cart_fit$finalModel)
 plot(cit_fit$finalModel)
 
 # Variable importance Neural Network
-vip(nnet_fit_impute$finalModel, num_features = 6, method = "model",
-    aesthetics = list(fill = "skyblue"))
+g5 <-
+  vip(nnet_fit_impute$finalModel, num_features = 6, method = "model",
+    aesthetics = list(fill = "skyblue")) + ggtitle("Neural Network VIP")
 
 #V <- varImp(nnet_fit_impute$finalModel)
 #
@@ -873,16 +883,37 @@ plotnet(nnet_fit_impute$finalModel)
 #Variable importance MARS
 V3 <- varImp(mars_fit_impute$finalModel)
 
-ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall, fill = Overall)) +
-  geom_bar(stat="identity") +
-  #geom_point(color = "blue", size = 2, alpha = 0.6) +
-  #geom_segment(aes(x = rownames(V3), xend = rownames(V3), y = 0, yend = Overall), 
-  #            color = 'skyblue') +
-  xlab('Variable') +
-  ylab('Overall Importance') +
+g6 <-
+  ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall, fill = Overall)) +
+  geom_bar(stat="identity", fill = "skyblue") +
+  xlab('') +
+  ylab('Importance') +
+  labs(title = "MARS VIP") +
   theme_light() +
-  coord_flip()
+  coord_flip() 
  
+
+df <- data.frame(importance = rf_recipe_var_imp_permutation$variable.importance)
+df$variable <- rownames(df)
+
+g2 <-  ggplot(df, aes(x = reorder(variable, importance), y = importance, fill = importance)) + 
+       geom_bar(stat="identity", position="dodge", fill = "skyblue") + coord_flip() +
+       ylab("Importance") +
+       xlab("") +
+       ggtitle("Random Forest VIP")
+
+```
+
+```{r, include = TRUE, echo=FALSE}
+ g2 <-  ggplot(df, aes(x = reorder(variable, importance), y = importance, fill = importance)) + 
+       geom_bar(stat="identity", position="dodge", fill = "skyblue") + coord_flip() +
+       ylab("Importance") +
+       xlab("") +
+       ggtitle("Random Forest VIP")
+  
+    
+plot_grid(g2, g5, g3, g6, ncol = 2)
+
 ```
 
 ### Resampling Results and Model Selection
