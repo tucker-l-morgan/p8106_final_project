@@ -131,17 +131,35 @@ cleaned_df = all_df %>%
   )
 ```
 
-Heart disease accounts for roughly 695,000 fatalities annually in the United States alone, with known risk factors that include high cholesterol, smoking, and blood pressure. In this project, we aim to utilize observations from the Framingham cohort study to predict whether a particular study subject will or will not develop coronary heart disease in the next decade. Our data subset of longitudinal observations come from Kaggle; its cleaning generally entailed converting appropriate variables to factors (and re-leveling where needed), renaming and recoding binary 1/0 variables with more descriptive "yes" and "no" for ease of interpretation, and excluding observations with missing data on any measure. Prior to such exclusions, the full set of data contained 4,240 total observations across 16 variables, which are:
+Heart disease accounts for roughly 695,000 fatalities annually in the United States alone, with known risk factors that include high cholesterol, smoking, and blood pressure. In this project, we aim to utilize observations from the Framingham cohort study to predict whether a particular study subject will or will not develop coronary heart disease over one decade’s follow-up. Our data subset of longitudinal observations come from Kaggle; its cleaning generally entailed converting appropriate variables to factors (and re-leveling where needed), and renaming and recoding binary 1/0 variables with more descriptive "yes" and "no" for ease of interpretation. While our midterm projects discarded observations lacking one or more features, this iteration attempts to overcome that limitation by using K Nearest Neighbors imputation. The full set of data contained 4,240 total observations across 16 variables, which are:
 
-$\text{\underline{7 categorical predictors}}$: `sex` (self-reported subject sex that takes values "male" or "female"); `education` (study participant's education that takes ordinal, mutually exclusive values "some_HS" (some high school completed), "HS_grad" (completed high school but did not attend college), "some_college" (attended college but did not graduate), and "college_grad" (graduated university)); `current_smoker` (binary "yes" or "no" indicating whether the participant was a smoker at the time of physical examination); `bp_meds` (binary "yes" or "no" indicating whether the participant was using anti-hypertensive medications at the time of physical examination); `prevalent_stroke` (binary "yes" or "no" indicating whether the participant had experienced stroke by the time of physical examination); `prevalent_hyp` (binary "yes" or "no" indicating whether the participant was being treated for active hypertension at the time of physical examination); and `diabetes` (binary "yes" or "no" indicating whether the participant was diagnosed as diabetic according to pre-specified criteria at the time of physical examination).
+$\text{\underline{7 categorical predictors}}$: 
 
-$\text{\underline{8 continuous numeric predictors}}$: `age` (age in years at the time of medical examination); `cigs_per_day` (average number of cigarettes smoked each day at the time of medical examination, notably not conditioned on smoking status (i.e. for those with `current_smoker` status as "no", should take the value 0)); `tot_chol` (total blood cholesterol in mg/dL at the time of physical examination); `sys_BP` (systolic blood pressure in mm Hg at the time of physical examination); `dia_BP` (diastolic blood pressure in mm Hg at the time of physical examination); `bmi` (body mass index in $kg/m^2$ in mm Hg at the time of physical examination); `heart_rate` (resting heart rate in beats per minute at the time of physical examination); and `glucose` (blood glucose level in mg/dL at the time of physical examination). 
+* `sex` (self-reported subject sex that takes values "male" or "female")
+* `education` (study participant's education that takes ordinal, mutually exclusive values "some_HS" (some high school completed), "HS_grad" (completed high school but did not attend college), "some_college" (attended college but did not graduate), and "college_grad" (graduated university))
+* `current_smoker` (binary "yes" or "no" indicating whether the participant was a smoker at the time of physical examination)
+* `bp_meds` (binary "yes" or "no" indicating whether the participant was using anti-hypertensive medications at the time of physical examination)
+* `prevalent_stroke` (binary "yes" or "no" indicating whether the participant had experienced stroke by the time of physical examination)
+* `prevalent_hyp` (binary "yes" or "no" indicating whether the participant was being treated for active hypertension at the time of physical examination)
+* `diabetes` (binary "yes" or "no" indicating whether the participant was diagnosed as diabetic according to pre-specified criteria at the time of physical examination).
 
-Finally, beyond our 15 covariates lies our outcome (response) variable `ten_year_chd`, which is a binary indicator for the presence or absence of coronary heart disease (CHD) at 10 years of follow-up. Of our 4,240 observations, 3,596 (84.8%) have absence of CHD, whereas 644 (15.2%) have CHD present -- a notable class imbalance.
+$\text{\underline{8 continuous numeric predictors}}$:
 
-## EDA Figures
+* `age` (age in years at the time of medical examination)
+* `cigs_per_day` (average number of cigarettes smoked each day at the time of medical examination, notably not conditioned on smoking status (i.e. for those with `current_smoker` status as "no", should take the value 0))
+* `tot_chol` (total blood cholesterol in mg/dL at the time of physical examination)
+* `sys_BP` (systolic blood pressure in mm Hg at the time of physical examination)
+* `dia_BP` (diastolic blood pressure in mm Hg at the time of physical examination)
+* `bmi` (body mass index in $kg/m^2$ in mm Hg at the time of physical examination)
+* `heart_rate` (resting heart rate in beats per minute at the time of physical examination)
+* `glucose` (blood glucose level in mg/dL at the time of physical examination)
 
-```{r missing data, include = T}
+Finally, beyond our 15 covariates lies our outcome (response) variable `ten_year_chd`, which is a binary indicator for the presence or absence of coronary heart disease (CHD) at 10 years of follow-up. Of our 4,240 observations, 3,596 (84.8%) exhibit absence of CHD, whereas 644 (15.2%) have CHD present -- a notable class imbalance.
+
+
+## Exploratory Data Analysis
+
+```{r missing data, include = TRUE, echo = FALSE}
 # Number of rows with any missing data
 rows_missing_data = sum(!complete.cases(cleaned_df))
 
@@ -150,11 +168,10 @@ rows_missing_data = sum(!complete.cases(cleaned_df))
 # Highest missingness rates: glucose (9.15%), education (2.48%), bp_meds (1.25%), tot_chol (1.18%)
 missing_data_viz = cleaned_df %>% 
   vis_miss()
-
-plot1 <- missing_data_viz
 ```
 
-Notably, 582 rows (13.7% of our observations) lacked at least one data point, with `glucose` accounting for the plurality of missing data (9.15% missing rate). Moving forward, we assume that our data is missing at random, and consequently build a KNN imputation step (using five nearest neighbors) into our preprocessing functionality, which also includes centering, scaling, and BoxCox transformations where possible. 
+Notably, 582 rows (13.7% of our observations) lacked information for at least one feature, with `glucose` accounting for the plurality of missing data (9.15% missing rate). Moving forward, we assume that our data is at least missing at random, and potentially completely at random; in other words, our missingness depends only on the observed data, and consequently it is sensible to construct a KNN imputation step (using five nearest neighbors) into our preprocessing functionality, which also includes centering, scaling, and BoxCox transformations in all possible cases.
+
 
 ```{r continuous variable feature plot, eval = TRUE}
 # Distributions of continuous variables factored by outcome
@@ -192,42 +209,39 @@ categorical_explore = categorical_vars_df %>%
        color = "10 Year CHD Status")
 ```
 
-```{r combined eda figure, eval = TRUE, include = T}
+```{r combined eda figure, eval = TRUE, include = TRUE, echo = FALSE}
 (continuous_explore / categorical_explore + plot_annotation(
   title = "Fig.1: Distributions of Predictors By Outcome Class"))
 ```
 
-When we stratify the distributions of our continuous predictors by outcome status, we find the most substantial differences in median age and systolic blood pressure for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for stroke history, diabetes status, and blood pressure medication status.
+When we stratify the distributions of our continuous predictors by outcome status, we find the most substantial differences in median age, systolic blood pressure, glucose, and daily cigarette consumption for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for stroke history, diabetes status, blood pressure medication status, and hypertension prevalence. 
 
-```{r correlation plot, eval = TRUE, include = T, fig.width=10, fig.height=7}
-missing_data_viz + (model.matrix(~0 + ., data = cleaned_df) %>%
+```{r correlation plot, eval = FALSE, include = TRUE, echo = TRUE, fig.width=10, fig.height=7}
+corr_plot <- model.matrix(~0 + ., data = cleaned_df) %>%
   cor(use = "pairwise.complete.obs") %>% 
-  ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 1, title = "Fig.2: Correlation of Predictors"))
+  ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 1)
+
+missing_data_viz + corr_plot + plot_annotation(title = "Fig. X: Missing Data and Correlation of Predictors")
 ```
 
 We observe no major multicollinearities, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
 
+Finally, we conducted checks for various parametric model assumptions, including homogeneity of variance and normality of residuals. Overall, we found that though there were no influential outliers in the data and there was lack of significant collinearity, several of these assumptions were not quite met, which we hypothesized would mean that non-parametric methods or regression methods with regularization, such as Lasso, might be more optimal for prediction.
+
 ## Modeling
 
-In prior work, we attempted to rectify class imbalance through upsampling and downsampling. However, because this method was ineffective in improving our AUC, the focus here was on trying additional models, including ones with increased flexibility. We began by splitting the data into 80% training set and 20% test set. Given lack of major collinearity and KNN imputation for missing data points, all available predictors were included in each model unless a specific model selected them out during the training process. In total, [TO DO] kinds of models were used, with a pre-processing step (imputation, centering, scaling, and Box-Cox transformations) included in each iteration of model training under 10-fold cross-validation, repeated five times. Seeds were set in each instance to ensure reproducibility of the data, given the many assumptions and tuning parameters in our variety of models. All tuning parameters were selected using cross-validation in model training to find the optimal model that maximized AUC. Our models were:
+As mentioned, model training for our binary classification and prediction involved the use of all 15 available predictors. Early on, class imbalance was identified as a potential issue, which we attempted to rectify in prior iterations of this work through upsampling and downsampling. However, because this method was ineffective in improving our AUC, the focus here was on trying additional models, including ones with increased flexibility. We began by splitting the data into 80% training set and 20% test set. Given lack of major collinearity and use of KNN imputation for missing data points, all available predictors were included in each model unless a specific model selected them out during the training process. In total, 11 kinds of models were used, with a pre-processing step (imputation, centering, scaling, and Box-Cox transformations) included in each iteration of model training under 10-fold cross-validation, repeated five times. Seeds were set in each instance to ensure reproducibility of results, given the many assumptions and tuning parameters in our variety of models. All tuning parameters were selected using cross-validation in model training to find the optimal model that maximized validation AUC. We constructed:
 
-* **Penalized logistic regression** (elastic net, binomial family, logit link), with objective function that includes loss and penalty given our high number of predictors, and tuning on $\alpha$ (mixing proportion) and $\lambda$ (total penalization) for our final model
-
-* **Generalized additive model (GAM)** (also binomial family, logit link), with potential inclusion of flexible nonlinearities for some predictors, performed in both `mgcv` for more flexibility and in `caret` for model comparison, and using general cross-validation to determine the smoothness of each operator $\hat{f_j}$ and to search over `GCV.Cp` given  unknown scale parameter
-
-* **Multivariate adaptive regression splines (MARS)** using `earth`, with tuning parameters (1) degree of features (number of possible hinge functions per parameter) and (2) number of terms (may not equal the number of predictors given the possibility of multiple hinge functions), including a stepwise model building procedure involving the addition of piecewise linear models / spline bases, followed by a pruning procedure
-
-* **Linear discriminant analysis (LDA)**, which has no tuning parameters and assumes normally distributed features to classify by nearest centroid following data sphering and projection onto smaller subspaces, tends to work reasonably well with small n or well-separated classes, which doesn't appear true in our case and may make the model less robust
-
-* **Random Forest**, [TO DO]
-
-* **Boosting**, [TO DO]
-
-* **Trees (CIT and CART)**, [TO DO]
-
-* **Support Vector Machine (Linear and Radial Kernels)**, [TO DO -- make sure to mention something about probabilities/ROC being poor metrics for SVM]
-
-* **Neural Network**, [TO DO]
+* **Penalized logistic regression** (elastic net, binomial family, logit link), with objective function that includes loss and penalty given our high number of predictors, and tuning on $\alpha$ (mixing proportion between L1 and L2 penalties, associated with LASSO and ridge, respectively) and $\lambda$ (a penalty term that limits the number and/or magnitude of predictor coefficients) for our final model. As with a generalized linear model (i.e. logistic regression with no tuning parameters or variable selection), we assume a linear relationship between some outcome $log \frac{\pi}{1-\pi}$, where $\pi$ is a probability of 10 year CHD presence, and our predictors $X_1, …, X_n$. Strictly speaking, parametric model assumptions, such normality of residuals may also be helpful to meet in theory, though in practice violations of these assumptions are not always seen as reasons alone not to try them, especially if the modeling process has yielded a satisfactory out-of-sample error rate.
+* **Generalized additive model (GAM)** (also binomial family, logit link), with potential inclusion of flexible nonlinearities for some predictors, performed in `caret` for model comparison, and using general cross-validation to determine the smoothness of each operator $\hat{f_j}$ and to search over `GCV.Cp` given  unknown scale parameter.
+* **Multivariate adaptive regression splines (MARS)** using `earth`, with tuning parameters (1) degree of features (number of possible hinge functions per parameter) and (2) number of terms (may not equal the number of predictors given the possibility of multiple hinge functions), including a stepwise model building procedure involving the addition of piecewise linear models / spline bases, followed by a pruning procedure. In general, MARS models tend to be well-suited for high-dimensional data problems. 
+* **Linear discriminant analysis (LDA)**, which has no tuning parameters and assumes normally distributed features to classify by nearest centroid following data sphering and projection onto smaller subspaces, tends to work reasonably well with small n or well-separated classes, which doesn't appear true in our case and may make the model less robust.
+* **Classification and Regression Tree (CART)**, which involves minimizing the Gini index (a measure of node purity such that a smaller value indicates a higher proportion of observations from a single class in the node) through a top-down, greedy approach that divides the feature space into a set of axis-parallel partitions, followed subsequently by cost-complexity pruning of these splits to obtain a set of optimal subtrees as a function of tuning parameter $\alpha$, selected through cross-validation. Once $\alpha$ is chosen such that mean squared prediction error from the left out k-th fold is minimized on average, a final subtree corresponding to our chosen $\alpha$ is returned, representing the final tree. Although single trees tend to be less stable than ensemble methods, such as random forest, we include them regardless simply out of interest for how much the use of multiple trees actually improves prediction accuracy. 
+* **Conditional Inference Tree (CIT)**, a non-parametric alternative to CART, given CART’s tendency towards overfitting and selection bias towards covariates with many possible splits. Although CITs continue to use recursive binary partitioning, they use a significance test to select input variables instead of choosing variables that maximize the information measure (e.g. Gini coefficient).  Given that our stopping criterion is based on p-values, the tuning parameter in this case is “mincriterion” such that a split is implemented when 1 minus the p-value exceeds this parameter, in order to ensure growing the right sized tree. Unlike CART, pruning does not occur after the largest tree is created. However, stopping may occur early. As with CART, we expect this method to be less stable than ensembles, such as random forest, but include the model here for completeness and personal interest.
+* **Random Forest**, an ensemble method that generates a set of bootstrapped training samples as the basis for a set of decorrelated trees, for which a random selection of predictors is chosen as the set of candidates for splitting each time a new split is considered. As with classical classification trees, we utilize a splitting rule based on the Gini index, although other methods, such as cross-entropy, are possible. Here, we do not tune over the splitting rule because we only try the Gini method. Using the `ranger` package to implement the random forest method, our first tuning parameter, `mtry`, represents the number of randomly selected predictors used as split candidates at each split, whereas our second tuning parameter, `min.node.size`, controls the size of the tree by defining the minimum number of observations that can be included in any given terminal node.
+* **Boosting**, a similar approach to random forest, however trees are grown sequentially - each tree is grown using information from previous trees. Given an initial tree, a second tree is fit to the residuals from the first. This second tree is then added into the fitted function in order to update the residuals. Iterative trees are typically small with just a few terminal nodes, determined by number of splits parameter *d*, leading to relatively slow learning. The shrinkage parameter $\lambda$ controls the speed of this process to avoid overfitting. The total number of trees, B, is the remaining tuning parameter for this method. If B is too large, the boosted model can overfit the training data.
+* **Support Vector Machine (SVM with Linear and Radial Kernels)**, which involves the construction of a hyperplane that maximizes separability, or soft margin between data points of each of the two classes, in high-dimensional feature space, thereby minimizing generalization error.  Only some proportion of the training observations serve as support vectors, which lie closest to the hyperplane, or decision surface, and would change that hyperplane’s location if removed. Given that the sets between which we’d like to discriminate tend not to be linearly separable, a radial kernel, which results in non-linear decision boundaries, is also used in practice. *Note: we are well aware that SVM should not generally be used to estimate probability of class membership, and that as a result, the AUC metric is not applicable given the weaknesses of Platt calibration. When checking the SVM model, we look therefore not only at the AUC metric, but also the model accuracy and kappa, ultimately determining that regardless of the metric, SVMs are weaker classifiers than some of our better models.* For the linear kernel, our tuning parameter is cost, which is selected using cross-validation and represents the penalty associated with having an observation on the incorrect side of the classification boundary. The smaller the cost, the less flexible the model (unlike, say, the comparable parameter associated with LASSO). For the radial kernel, we add a second tuning parameter, sigma, which controls model flexibility (higher gamma means more flexible model) and is also selected with cross-validation. One inherent limitation to our radial SVM is that we chose to train on only 15% of the training dataset due to computing limitations. This can improve speed of training the model while sacrificing relatively little discretionary performance because the primary focus of SVM models is the boundary between classes rather than the full scope of observations.
+* **Neural Network**, which mimics a biological nervous system by modeling connections with weights between nodes. Each predictor is considered an input, which is then modified by weight and summed into a linear combination; this may occur iteratively through sets of hidden layers until one final output layer is reached. Activation functions provide non-linearity to neural networks, and for classification tasks, the softmax activation function (a generalization of logistic functions used for multiclass problems) tends to be used in order to normalize the network outputs to a multinomial probability distribution over predicted output classes. Our model has two tuning parameters set by cross-validation: decay and size. Decay, or weight decay, is a regularization technique applied to network weights in order to reduce overfitting, while size is the number of units in the hidden layer, and can be zero if there are skip-layer units. 
 
 ```{r model tuning setup full data set}
 set.seed(2022)
@@ -598,7 +612,6 @@ confusionMatrix(data = lda_pred_class_test,
                 reference = y_test)
 ```
 
-
 ```{r}
 ### Neural Network Model with imputation
 
@@ -614,8 +627,6 @@ nnet_fit_impute <- train(preprocess_recipe,
 #Note that when we impute the model, we should use testing data with missing values (NA)
 nnet_impute_pred_test_probs <- predict(nnet_fit_impute, newdata = testing_df, type = "prob")[,1]
 ```
-
-
 
 ```{r}
 #### Averaged Neural Network Model with imputation
@@ -634,7 +645,6 @@ nnet_impute_pred_test_probs <- predict(nnet_fit_impute, newdata = testing_df, ty
 #avnnet_impute_pred_test_probs <- predict(avnet_fit_impute, newdata = testing_df, type = "prob")[,1]
 ```
 
-
 ```{r}
 ### MARS Model with imputation
 set.seed(2022)
@@ -648,7 +658,6 @@ mars_fit_impute <- train(preprocess_recipe,
 
 mars_impute_pred_test_probs <- predict(mars_fit_impute, newdata = testing_df, type = "prob")[,1]
 ```
-
 
 ```{r}
 ### GAM Model with imputation
@@ -667,7 +676,9 @@ gam_impute_pred_test_probs <- predict(GAM_fit_impute, newdata = testing_df, type
 
 ### Optimal Tuning Parameters
 
-```{r, include=T, fig.width=12, fig.height=14}
+Our tuning parameters were selected via 10-fold cross-validation repeated 5 times using only the training data to maximize validation AUC. We chose AUC as an evaluation measure because it is generally invariant to classification decision boundaries. Our optimal elastic net model had parameters $\alpha$ = 0.3 and $\lambda$ = 0.0164, where $\alpha$ = 0 indicates pure ridge regression and $\alpha$ = 1 indicates pure LASSO regression, so our final model is closer to  ridge. The optimal MARS model had a product degree of 1 and ‘nprune’ of 6. Our optimal random forest model used 1 randomly selected predictor (known as `mtry` in some contexts) and a minimum node size of 2 observations per node. Our optimal boosted model had a maximum tree depth of 1 with 5,000 boosting iterations and a shrinkage factor of 0.002. The optimal cost parameter for linear SVM was 0.00777. Our optimal radial SVM model had a $\sigma$ value of 0.0498 and a cost parameter of 2.61. The optimal parameters for our neural network model were size 2 and decay of 1.65.
+
+```{r, include = TRUE, echo = FALSE, fig.width=12, fig.height=14}
 # Optimal tuning parameters: GLMNet
 # Alpha = 0.3, Lambda = 0.0164
 #logit_next$bestTune
@@ -760,7 +771,11 @@ g8 <- ggplot(mars_fit_impute, highlight = T) + labs(title = "MARS", y = "AUC") +
 
 ### Variable Importance
 
-```{r, include = T}
+The most important variables in our elastic net model were age, systolic blood pressure, sex, and cigarettes per day. The GAM identified age, glucose, and sex as the most important variables. The most important variables in the MARS model were systolic blood pressure, age, sex, and glucose. For our random forest model, we looked at permutation and impurity methods to assess variable importance. When using the permutation method, we identified systolic blood pressure, diastolic blood pressure, prevalence of hypertension, and glucose as important variables. Similarly, when using the impurity method, we identified systolic blood pressure, age, diastolic blood pressure, and glucose. The most important variables in our boosted model were age, systolic blood pressure, glucose, and cigarettes per day. Our neural network model identified similar important variables in age, glucose, and systolic blood pressure.
+
+Overall, we tended to see the following variables as being important across our analysis: systolic blood pressure, age, glucose, and sex. This is perhaps unsurprising given our exploratory data analysis and relatively better class separability for these features than for others.
+
+```{r, include = TRUE, echo = FALSE}
 # Variable importance: GLMNet
 # Most important variables: age, sys_bp, sexfemale, cigs_per_day
 logit_vip_graph = vip(logit_next, num_features = 11, method = "model",
@@ -870,8 +885,11 @@ ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall, fill = Overall)) 
  
 ```
 
-
 ### Resampling Results and Model Selection
+
+Having trained and fit both more and less flexible models, we then explore the resampling AUC across models and find generally limited stratification with a couple of notable exceptions – namely, significantly lower performance from support vector machines in particular, but also from our tree models (classification tree especially). Although the SVM with a radial kernel did indeed provide significant improvement over the linear SVM as hypothesized, the performance was still far below our other models. This may be in part due to the fact that given the limitations of our machine power, we could only train the radial SVM on a much smaller proportion of our training observations, which leaves room for future exploration. Again, we also note that SVMs cannot quite be compared on AUC given the use of Platt’s probabilities; regardless, we check other metrics, such as accuracy and kappa, and find that these, too, underperform other models – so we would not select SVM models anyway.
+
+Our top 5 models (elastic net, MARS, neural network, LDA, and GAM) are all extremely close in resampling AUC, falling in the 0.716 to 0.721 range. In general, we prefer to use the simplest, most easily interpretable model, which luckily also happens to be our highest performing model on this metric: the elastic net model. Our elastic net model has an AUC of 0.721 and is closer to the ridge model than to LASSO. This AUC means that even our best model is only “okay” or “decent”; its accuracy of just over 85% is also not significantly above the No Information Rate of 0.849, which means we see only marginal improvement once we take into account the inherent class imbalance found in our data. As noted, upsampling or manual changes to the probability threshold for classification did not ultimately lead to significant improvement, hence its omission here. It’s also worth noting that though none of our models achieves a particularly high sensitivity, the elastic net model also achieves a middle ground in the sensitivity/specificity tradeoff, falling in the middle of the pack compared to other models on both metrics.
 
 ```{r}
 # Results from resampling on training data 
@@ -896,7 +914,7 @@ ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall, fill = Overall)) 
 #bwplot(resamp, layout = c(3, 1))
 ```
 
-```{r resampling train results, include = TRUE, fig.height=10, fig.width=10}
+```{r resampling train results, include = TRUE, echo = FALSE, fig.height=10, fig.width=10}
 # Results from resampling on training data 
 resamp = resamples(list(Random_Forest = rf_fit, 
                         Adaboost = boost_fit,
@@ -1007,8 +1025,7 @@ result3 <-
 result1/(result2 +result3)
 ```
 
-
-```{r training result table, include = TRUE}
+```{r training result table, include = TRUE, echo = FALSE}
 table_result <-
   result$statistics$ROC[,-7] %>% 
   data.frame() %>%
@@ -1024,7 +1041,7 @@ table_result
 
 ### Model Application to Test Data
 
-```{r auc and roc testing, include = TRUE}
+```{r auc and roc testing, include = TRUE, echo = FALSE}
 # ROC curves for fitted models applied to testing data
 # AUC is highest for glmnet and boost_caret_impute (0.74 for both)
 
@@ -1077,63 +1094,12 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc,4)),
        col = P36[14:24], lwd = 2)
 ```
 
+In the ROC plot above, we see the area-under-curve of our selected model applied to our test data with a value of 0.7403, indicating middling classification performance. Despite our efforts with data imputation, it looks like our model still suffers due to class imbalance.
+
+## Limitations
+
+As noted throughout, class imbalance was a difficulty for model training and performance. Despite our best efforts at upsampling the less common class (CHD presence), we could not significantly improve model performance. We would have preferred to have at least 1000 observations in each class. Another limitation here is that we used the `recipes` implementation of KNN imputation, for the most part, since this works for both categorical and continuous variables, and can easily work within `caret` model training during repeated cross-validation. However, our future work might explore whether bagged imputation might be more effective, given that our predictor with highest missingness (glucose) has one clear correlate that is essentially complete and has a clear correlational mechanism (diabetes). In addition, interaction terms are excluded from this analysis, although there may very well be some effect measure modification at play. As mentioned, if we had more computational power, we would try the radial SVM without having to train a model only on a smaller number of training observations than our machines would allow – although we’d still face the same issues in making comparisons AUC given the use of Platt’s probabilities. We note as well the many violations found for parametric model assumptions, which may inherently limit the utility of models like elastic net. Our AUC may also improve with the inclusion of more and other types of predictors, such as race, that are missing from our data set, but were certainly recorded during the original Framingham Heart Study.  Such features may be more closely related to and more highly predictive of our 10-year CHD follow-up outcome. 
+
 ## Conclusion
 
-TO DO
-
-## Still In Progress
-
-```{r SVM radial}
-# Trying SVM with radial classifier for fun
-# set.seed(2022)
-# 
-# svm_grid = expand.grid(C = exp(seq(-2, 3, len = 50)),
-#                        sigma = exp(seq(-3, 0, len = 50)))
-# 
-# svm_fit_impute_classes = train(preprocess_recipe,
-#                       data = training_df,
-#                       method = "svmRadialSigma",
-#                       tuneGrid = svm_grid,
-#                       trControl = ctrl)
-# 
-# # I know we're told not to do this, but including Platt's probabilistic outputs here just to see...
-# svm_fit_impute_probs = train(preprocess_recipe,
-#                             data = training_df,
-#                             method = "svmRadialSigma",
-#                             tuneGrid = svm_grid,
-#                             trControl = ctrl,
-#                             prob.model = TRUE)
-```
-
-```{r SVM linear recipe}
-# SVM with linear kernel, imputation from recipe
-# Doesn't work; will try impute from train function instead
-# set.seed(2022)
-# 
-# svm_linear_fit = train(preprocess_recipe,
-#                        data = training_df,
-#                        method = "svmLinear",
-#                        tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))),
-#                        trControl = ctrl
-#                        )
-# 
-# plot(svm_linear_fit, highlight = TRUE, xTrans = log)
-```
-
-```{r GLMNet with recipe}
-# # Penalized logistic regression
-# # Doesn't work
-# # https://stackoverflow.com/questions/48179423/error-error-in-lognetx-is-sparse-ix-jx-y-weights-offset-alpha-nobs/48230658#48230658
-# set.seed(2022)
-# 
-# glm_grid = expand.grid(alpha = seq(0, 1, length = 11),
-#                        lambda = exp(seq(-8, -3, length = 19)))
-# 
-# logit_glm = train(preprocess_recipe,
-#                   data = training_df,
-#                   method = "glmnet",
-#                   tuneGrid = glm_grid,
-#                   metric = "ROC",
-#                   trControl = ctrl,
-#                   family = "binomial")
-```
+Overall, our modeling tells us that the most important determinants of heart disease tend to be systolic blood pressure, age, glucose, and sex, which played important roles in most of our models and jibes with our exploratory analysis. That said, other covariates, such as race and income, may ultimately have had stronger explanatory power of CHD status at 10 years had they been included. Although our attempt to find a model with AUC above 0.80 did not prevail – even with upsampling and despite the inclusion of models with varying degrees of flexibility – we settled on a reasonably-performing penalized logistic regression model, i.e. elastic net, that did a fair job when applied to our test data. Regardless, the consistency of variable importance in our parametric models, and the fact that they generally performed better than our non-parametric and/or black-box models (with a couple of exceptions, including the neural network) may ostensibly be used by physicians going forward to help identify patients who may be particularly susceptible to CHD in the future. A brief literature review confirms that these variables have been noted as important risk factors for CHD by medical professionals and researchers in the past, which lends additional credibility to our findings.
