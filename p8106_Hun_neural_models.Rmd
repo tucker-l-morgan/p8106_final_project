@@ -35,7 +35,6 @@ library(nnet)
 library(xgboost)
 library(NeuralNetTools)  
 library(Ckmeans.1d.dp)
-library(ranger)
 library(kableExtra)
 
 knitr::opts_chunk$set(
@@ -140,12 +139,12 @@ testing_df = cleaned_df[-index_train, ]
 training_df_na_omit <- training_df %>%  na.omit()
 testing_df_na_omit <- testing_df %>% na.omit()
 
-# Train control with 5-fold cross-validation
-ctrl = trainControl(method = "cv",
-                    number = 5,
+#Train control with 10-fold cross-validation repeated 5 times
+ctrl1 = trainControl(method = "cv",
+                    number = 2,
                     summaryFunction = twoClassSummary,
                     classProbs = TRUE,
-                    verboseIter = TRUE)
+                    verboseIter = T)
 ```
 
 ```{r preprocessing with recipe}
@@ -173,7 +172,7 @@ nnet_fit <- train(ten_year_chd~.,
                                           size = c(1:5)),
                   metric = "ROC",
                   preProcess = c("center", "scale", "BoxCox"),
-                  trControl = ctrl)
+                  trControl = ctrl1)
 ```
 
 ```{r}
@@ -198,7 +197,7 @@ ggplot(V, aes(x = reorder(rownames(V),Overall), y = Overall)) +
   xlab('Variable') +
   ylab('Overall Importance') +
   theme_light() +
-  coord_flip() 
+  coord_flip()
 ```
 
 
@@ -212,11 +211,11 @@ nnet_fit_impute <- train(preprocess_recipe,
                          tuneGrid =  expand.grid(decay = exp(seq(-1, 2.5, len = 15)),  
                                                  size = c(1:5)),
                          metric = "ROC",
-                         trControl = ctrl)
+                         trControl = ctrl1)
 ```
 
 ```{r}
-ggplot(nnet_fit, highlight = T)
+ggplot(nnet_fit_impute, highlight = T)
 ```
 
 
@@ -251,7 +250,7 @@ avnet_fit <- train(ten_year_chd ~ .,
                    trace = FALSE, 
                    metric = "ROC",
                    preProcess = c("center", "scale", "BoxCox"),
-                   trControl = ctrl)  
+                   trControl = ctrl1)  
 ```
 
 ```{r}
@@ -291,16 +290,11 @@ avnet_fit_impute <- train(preprocess_recipe,
                           tuneGrid = my.grid, 
                           trace = FALSE, 
                           metric = "ROC",
-                          trControl = ctrl)  
+                          trControl = ctrl1)  
 ```
 
 ```{r}
 ggplot(avnet_fit_impute, highlight = T)
-
-```
-
-```{r}
-avnet_fit_impute$resample
 ```
 
 
@@ -327,7 +321,7 @@ ex_gradient_boost_fit <- train(ten_year_chd ~ .,
                                tuneGrid = xgbGrid,
                                metric = "ROC", 
                                preProcess = c("center", "scale", "BoxCox"),
-                               trControl = ctrl)
+                               trControl = ctrl1)
 ```
 
 ```{r}
@@ -355,7 +349,7 @@ mars_fit <- train(ten_year_chd~.,
                                           nprune = 2:35),
                    metric = "ROC",
                    preProcess = c("center", "scale", "BoxCox"),
-                   trControl = ctrl)
+                   trControl = ctrl1)
 ```
 
 ```{r}
@@ -371,9 +365,10 @@ p_mars <-
   geom_point(aes(best_prune, max(results.ROC)), size = 3, shape = 5, color = "purple") +
   geom_line() +
   labs(title = "MARS", y = "AUC (10-fold CV)", x = "Tuning parameter (nprune)") +
-  annotate("text",x = 6, y = 0.75, label = "6") +
   theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom") +
   labs(color = "Product Degree")
+
+#annotate("text",x = 6, y = 0.75, label = "6")
 
 p_mars
 ```
@@ -401,7 +396,7 @@ mars_fit_impute <- train(preprocess_recipe,
                          tuneGrid = expand.grid(degree = 1:3, 
                                                 nprune = 2:35),
                          metric = "ROC",
-                         trControl = ctrl)
+                         trControl = ctrl1)
 ```
 
 ## GAM Model
@@ -414,7 +409,7 @@ GAM_fit <- train(ten_year_chd~.,
                   family = "binomial",
                   preProcess = c("center", "scale", "BoxCox"),
                   tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE, FALSE)),
-                  trControl = ctrl)
+                  trControl = ctrl1)
 ```
 
 
@@ -442,11 +437,22 @@ GAM_fit_impute <- train(preprocess_recipe,
                         metric = "ROC",
                         family = "binomial",
                         tuneGrid = data.frame(method = "GCV.Cp", select = c(TRUE, FALSE)),
-                        trControl = ctrl)
+                        trControl = ctrl1)
 ```
 
 
-```{r resampling train results}
+```{r}
+resam
+```
+
+```{r}
+ predict(GAM_fit_impute, newdata = testing_df, type = "prob")[,1]
+```
+
+
+
+
+```{r}
 # Results from resampling on training data 
 resamp = resamples(list(Neural_Network = nnet_fit,
                         Neural_Network_Impute = nnet_fit_impute,
@@ -480,7 +486,7 @@ plot_result <-
   stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
                width = 0.75, size = 1, linetype = "solid") + 
   coord_flip() +
-  labs(title = "Fig.5 Distribution of the Estimated AUC for six models from 5-fold CV", 
+  labs(title = "Fig.5 Distribution of the Estimated AUC for six models from 10-fold CV", 
        subtitle = "Middle box line represents mean of AUC",
        x = "Model", y = "Area under the ROC curve",
        caption = "") +
@@ -489,6 +495,7 @@ plot_result <-
         plot.caption = element_text(hjust = 0.5))
 plot_result
 ```
+
 ```{r}
 table_result <-
   result$statistics$ROC[,-7] %>% 
@@ -497,38 +504,38 @@ table_result <-
   rownames_to_column() %>%
   dplyr::rename(Models = rowname) %>%
   arrange(desc(Mean)) %>%
-  kbl(caption = "ROC from 5-fold CV estimate") %>%
+  kbl(caption = "ROC from 10-fold CV estimate") %>%
   kable_classic("striped", full_width = F , html_font = "Cambria",
                 latex_options = "HOLD_position")
 table_result
 ```
 
 ```{r, fig.width=10, fig.height=5}
-glm.pred <- predict(nnet_fit, newdata = testing_df_na_omit, type = "prob")[,2]
+glm.pred <- predict(nnet_fit, newdata = testing_df_na_omit, type = "prob")[,1]
 roc.nnet <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
 
-glm.pred <- predict(nnet_fit_impute, newdata = testing_df, type = "prob")[,2]
+glm.pred <- predict(nnet_fit_impute, newdata = testing_df, type = "prob")[,1]
 roc.nnet.impute <- roc(testing_df$ten_year_chd, glm.pred)
 
-glm.pred <- predict(avnet_fit, newdata = testing_df_na_omit, type = "prob")[,2]
+glm.pred <- predict(avnet_fit, newdata = testing_df_na_omit, type = "prob")[,1]
 roc.avnnet <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
 
-glm.pred <- predict(avnet_fit_impute, newdata = testing_df, type = "prob")[,2]
+glm.pred <- predict(avnet_fit_impute, newdata = testing_df, type = "prob")[,1]
 roc.avnnet.impute <- roc(testing_df$ten_year_chd, glm.pred)
 
-glm.pred <- predict(ex_gradient_boost_fit, newdata = testing_df_na_omit, type = "prob")[,2]
+glm.pred <- predict(ex_gradient_boost_fit, newdata = testing_df_na_omit, type = "prob")[,1]
 egb.roc <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
 
-glm.pred <- predict(mars_fit, newdata = testing_df_na_omit, type = "prob")[,2]
+glm.pred <- predict(mars_fit, newdata = testing_df_na_omit, type = "prob")[,1]
 roc.mars <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
 
-glm.pred <- predict(mars_fit_impute, newdata = testing_df, type = "prob")[,2]
+glm.pred <- predict(mars_fit_impute, newdata = testing_df, type = "prob")[,1]
 roc.mars.impute <- roc(testing_df$ten_year_chd, glm.pred)
 
-glm.pred <- predict(GAM_fit, newdata = testing_df_na_omit, type = "prob")[,2]
+glm.pred <- predict(GAM_fit, newdata = testing_df_na_omit, type = "prob")[,1]
 roc.gam <- roc(testing_df_na_omit$ten_year_chd, glm.pred)
 
-glm.pred <- predict(GAM_fit_impute, newdata = testing_df, type = "prob")[,2]
+glm.pred <- predict(GAM_fit_impute, newdata = testing_df, type = "prob")[,1]
 roc.gam.impute <- roc(testing_df$ten_year_chd, glm.pred)
 
 
@@ -556,4 +563,5 @@ modelNames <- c("Neural Network","Neural Network Impute","Averaged Neural Networ
 legend("bottomright", legend = paste0(modelNames, ": ", round(auc,4)),
        col = c(1:9), lwd = 2)
 ```
+
 
