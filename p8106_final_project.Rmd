@@ -141,7 +141,7 @@ Finally, beyond our 15 covariates lies our outcome (response) variable `ten_year
 
 ## EDA Figures
 
-```{r missing data}
+```{r missing data, include = T}
 # Number of rows with any missing data
 rows_missing_data = sum(!complete.cases(cleaned_df))
 
@@ -150,6 +150,8 @@ rows_missing_data = sum(!complete.cases(cleaned_df))
 # Highest missingness rates: glucose (9.15%), education (2.48%), bp_meds (1.25%), tot_chol (1.18%)
 missing_data_viz = cleaned_df %>% 
   vis_miss()
+
+plot1 <- missing_data_viz
 ```
 
 Notably, 582 rows (13.7% of our observations) lacked at least one data point, with `glucose` accounting for the plurality of missing data (9.15% missing rate). Moving forward, we assume that our data is missing at random, and consequently build a KNN imputation step (using five nearest neighbors) into our preprocessing functionality, which also includes centering, scaling, and BoxCox transformations where possible. 
@@ -190,18 +192,17 @@ categorical_explore = categorical_vars_df %>%
        color = "10 Year CHD Status")
 ```
 
-```{r combined eda figure, eval = TRUE}
-continuous_explore / categorical_explore + plot_annotation(
-  title = "Fig.1: Distributions of Predictors By Outcome Class"
-)
+```{r combined eda figure, eval = TRUE, include = T}
+(continuous_explore / categorical_explore + plot_annotation(
+  title = "Fig.1: Distributions of Predictors By Outcome Class"))
 ```
 
 When we stratify the distributions of our continuous predictors by outcome status, we find the most substantial differences in median age and systolic blood pressure for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for stroke history, diabetes status, and blood pressure medication status.
 
-```{r correlation plot, eval = TRUE}
-model.matrix(~0 + ., data = cleaned_df) %>%
+```{r correlation plot, eval = TRUE, include = T, fig.width=10, fig.height=7}
+missing_data_viz + (model.matrix(~0 + ., data = cleaned_df) %>%
   cor(use = "pairwise.complete.obs") %>% 
-  ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 2, title = "Fig.2: Correlation of Predictors")
+  ggcorrplot(show.diag = F, type = "lower", lab = TRUE, lab_size = 1, title = "Fig.2: Correlation of Predictors"))
 ```
 
 We observe no major multicollinearities, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
@@ -759,10 +760,12 @@ g8 <- ggplot(mars_fit_impute, highlight = T) + labs(title = "MARS", y = "AUC") +
 
 ### Variable Importance
 
-```{r}
+```{r, include = T}
 # Variable importance: GLMNet
 # Most important variables: age, sys_bp, sexfemale, cigs_per_day
-logit_vip_graph = vip(logit_next, num_features = 20, method = "model")
+logit_vip_graph = vip(logit_next, num_features = 11, method = "model",
+                      aesthetics = list(palette = "skyblue"))
+logit_vip_graph
 
 # Variable importance RF recipe: permutation / gini
 # sys_bp, dia_bp, glucose, prevalent_hyp
@@ -794,31 +797,31 @@ barplot(sort(ranger::importance(rf_recipe_var_imp_impurity), decreasing = FALSE)
 
 # Variable importance RF caret: permutation / gini
 # sys_bp, dia_bp, prevalent_hyp, glucose
-rf_caret_var_imp_permutation = ranger(ten_year_chd ~ ., 
-                           training_df[complete.cases(training_df),],
-                           mtry = rf_caret$bestTune[[1]],
-                           splitrule = "gini",
-                           min.node.size = rf_caret$bestTune[[3]],
-                           importance = "permutation",
-                           scale.permutation.importance = TRUE)
+#rf_caret_var_imp_permutation = ranger(ten_year_chd ~ ., 
+#                           training_df[complete.cases(training_df),],
+#                           mtry = rf_caret$bestTune[[1]],
+#                           splitrule = "gini",
+#                           min.node.size = rf_caret$bestTune[[3]],
+#                           importance = "permutation",
+#                           scale.permutation.importance = TRUE)
 
-barplot(sort(ranger::importance(rf_caret_var_imp_permutation), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+#barplot(sort(ranger::importance(rf_caret_var_imp_permutation), decreasing = FALSE),
+#        las = 2, horiz = TRUE, cex.names = 0.7,
+#        col = colorRampPalette(colors = c("cyan", "blue"))(12))
 
 # Variable importance RF caret: impurity / gini
 # sys_bp, age, dia_bp, glucose
-rf_caret_var_imp_impurity = ranger(ten_year_chd ~ ., 
-                           training_df[complete.cases(training_df),],
-                           mtry = rf_caret$bestTune[[1]],
-                           splitrule = "gini",
-                           min.node.size = rf_caret$bestTune[[3]],
-                           importance = "impurity",
-                           scale.permutation.importance = TRUE)
-
-barplot(sort(ranger::importance(rf_caret_var_imp_impurity), decreasing = FALSE),
-        las = 2, horiz = TRUE, cex.names = 0.7,
-        col = colorRampPalette(colors = c("cyan", "blue"))(12))
+#rf_caret_var_imp_impurity = ranger(ten_year_chd ~ ., 
+#                           training_df[complete.cases(training_df),],
+#                           mtry = rf_caret$bestTune[[1]],
+#                           splitrule = "gini",
+#                           min.node.size = rf_caret$bestTune[[3]],
+#                           importance = "impurity",
+#                           scale.permutation.importance = TRUE)
+#
+#barplot(sort(ranger::importance(rf_caret_var_imp_impurity), decreasing = FALSE),
+#        las = 2, horiz = TRUE, cex.names = 0.7,
+#        col = colorRampPalette(colors = c("cyan", "blue"))(12))
 
 # Variable importance Boost Recipe
 # age, sys_bp, glucose, cigs_per_day
@@ -826,7 +829,7 @@ summary(boost_fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
 # Variable importance Boost Caret
 # age, sys_bp, glucose, cigs_per_day
-summary(boost_caret$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+#summary(boost_caret$finalModel, las = 2, cBars = 19, cex.names = 0.6)
 
 # Final model CART
 rpart.plot(cart_fit$finalModel)
@@ -835,7 +838,9 @@ rpart.plot(cart_fit$finalModel)
 plot(cit_fit$finalModel)
 
 # Variable importance Neural Network
-vip(nnet_fit_impute$finalModel)
+vip(nnet_fit_impute$finalModel, num_features = 6, method = "model",
+    aesthetics = list(fill = "skyblue"))
+
 #V <- varImp(nnet_fit_impute$finalModel)
 #
 #ggplot(V, aes(x = reorder(rownames(V),Overall), y = Overall)) +
@@ -853,26 +858,16 @@ plotnet(nnet_fit_impute$finalModel)
 #Variable importance MARS
 V3 <- varImp(mars_fit_impute$finalModel)
 
-ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall)) +
-  geom_point(color = "blue", size = 2, alpha = 0.6) +
-  geom_segment(aes(x = rownames(V3), xend = rownames(V3), y = 0, yend = Overall), 
-              color = 'skyblue') +
+ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall, fill = Overall)) +
+  geom_bar(stat="identity") +
+  #geom_point(color = "blue", size = 2, alpha = 0.6) +
+  #geom_segment(aes(x = rownames(V3), xend = rownames(V3), y = 0, yend = Overall), 
+  #            color = 'skyblue') +
   xlab('Variable') +
   ylab('Overall Importance') +
   theme_light() +
   coord_flip()
-
-# Variable importance GAM
-#4 <- varImp(GAM_fit_impute$finalModel)
-
-#gplot(V4, aes(x = reorder(rownames(V4),Overall), y = Overall)) +
-# geom_point(color = "blue", size = 2, alpha = 0.6) +
-# geom_segment(aes(x = rownames(V4), xend = rownames(V4), y = 0, yend = Overall), 
-#             color = 'skyblue') +
-# xlab('Variable') +
-# ylab('Overall Importance') +
-# theme_light() +
-# coord_flip()
+ 
 ```
 
 
@@ -901,7 +896,7 @@ ggplot(V3, aes(x = reorder(rownames(V3),Overall), y = Overall)) +
 #bwplot(resamp, layout = c(3, 1))
 ```
 
-```{r resampling train results, include = TRUE}
+```{r resampling train results, include = TRUE, fig.height=10, fig.width=10}
 # Results from resampling on training data 
 resamp = resamples(list(Random_Forest = rf_fit, 
                         Adaboost = boost_fit,
@@ -932,14 +927,42 @@ ROC_df <-
          GAM = result$values$`GAM~ROC`) %>% 
   pivot_longer(Random_Forest:GAM, names_to = "method", values_to = "values")
 
-plot_result <-
+Sens_df <-  
+  tibble(Random_Forest = result$values$`Random_Forest~Sens`,
+         Adaboost = result$values$`Adaboost~Sens`,
+         Elastic_Net = result$values$`Elastic_Net~Sens`,
+         Classfication_Tree = result$values$`Classfication_Tree~Sens`,
+         Conditional_Inference_Tree = result$values$`Conditional_Inference_Tree~Sens`,
+         SVM_Linear = result$values$`SVM_Linear~Sens`,
+         SVM_Radial = result$values$`SVM_Radial~Sens`,
+         LDA = result$values$`LDA~Sens`,
+         Neural_Network = result$values$`Neural_Network~Sens`,
+         MARS = result$values$`MARS~Sens`,
+         GAM = result$values$`GAM~Sens`) %>% 
+  pivot_longer(Random_Forest:GAM, names_to = "method", values_to = "values")
+
+Spec_df <-  
+  tibble(Random_Forest = result$values$`Random_Forest~Spec`,
+         Adaboost = result$values$`Adaboost~Spec`,
+         Elastic_Net = result$values$`Elastic_Net~Spec`,
+         Classfication_Tree = result$values$`Classfication_Tree~Spec`,
+         Conditional_Inference_Tree = result$values$`Conditional_Inference_Tree~Spec`,
+         SVM_Linear = result$values$`SVM_Linear~Spec`,
+         SVM_Radial = result$values$`SVM_Radial~Spec`,
+         LDA = result$values$`LDA~Spec`,
+         Neural_Network = result$values$`Neural_Network~Spec`,
+         MARS = result$values$`MARS~Spec`,
+         GAM = result$values$`GAM~Spec`) %>% 
+  pivot_longer(Random_Forest:GAM, names_to = "method", values_to = "values")
+
+result1 <-
   ROC_df %>% 
   ggplot(aes(x = reorder(method, values), values, color = method)) + 
   geom_boxplot(fatten = NULL, alpha = 0.3) +
   stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
                width = 0.75, size = 1, linetype = "solid") + 
   coord_flip() +
-  labs(title = "Fig.5 Distribution of the Estimated AUC for six models from 10-fold CV", 
+  labs(title = "Distribution of the CV Estimated AUC", 
        subtitle = "Middle box line represents mean of AUC",
        x = "Model", y = "Area under the ROC curve",
        caption = "") +
@@ -947,8 +970,45 @@ plot_result <-
         plot.subtitle = element_text(size = 7, hjust = 0.5),
         plot.caption = element_text(hjust = 0.5),
         legend.position = "none")
-plot_result
 
+result2 <-
+  Sens_df %>% 
+  ggplot(aes(x = reorder(method, values), values, color = method)) + 
+  geom_boxplot(fatten = NULL, alpha = 0.3) +
+  stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid") + 
+  coord_flip() +
+  labs(title = "Fig.5 Distribution of the CV Estimated Sensitivity", 
+       subtitle = "Middle box line represents mean of sensitivity",
+       x = "Model", y = "Sensitivity",
+       caption = "") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(size = 7, hjust = 0.5),
+        plot.caption = element_text(hjust = 0.5),
+        legend.position = "none")
+
+result3 <-
+  Spec_df %>% 
+  ggplot(aes(x = reorder(method, values), values, color = method)) + 
+  geom_boxplot(fatten = NULL, alpha = 0.3) +
+  stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
+               width = 0.75, size = 1, linetype = "solid") + 
+  coord_flip() +
+  labs(title = "Fig.5 Distribution of the CV Estimated Specificity", 
+       subtitle = "Middle box line represents mean of specificity",
+       x = "Model", y = "Specificity",
+       caption = "") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(size = 7, hjust = 0.5),
+        plot.caption = element_text(hjust = 0.5),
+        legend.position = "none")
+
+
+result1/(result2 +result3)
+```
+
+
+```{r training result table, include = TRUE}
 table_result <-
   result$statistics$ROC[,-7] %>% 
   data.frame() %>%
