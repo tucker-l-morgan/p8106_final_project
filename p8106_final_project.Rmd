@@ -7,8 +7,8 @@ output:
     latex_engine: xelatex
     toc: yes
     toc_depth: 3
-  fontsize: 11pt
-  geometry: margin=0.75in
+  fontsize: 10pt
+  geometry: margin=0.5in
   header-includes:
     -\usepackage{fancyhdr}
     -\usepackage{lipsum}
@@ -50,6 +50,7 @@ library(Ckmeans.1d.dp)
 library(kableExtra)
 library(Polychrome)
 library(cowplot)
+library(plotmo)
 
 knitr::opts_chunk$set(
   echo = TRUE,
@@ -1134,3 +1135,24 @@ As noted throughout, class imbalance was a difficulty for model training and per
 ## Conclusion
 
 Overall, our modeling tells us that the most important determinants of heart disease tend to be systolic blood pressure, age, glucose, and sex, which played important roles in most of our models and jibes with our exploratory analysis. That said, other covariates, such as race and income, may ultimately have had stronger explanatory power of CHD status at 10 years had they been included. Although our attempt to find a model with AUC above 0.80 did not prevail – even with upsampling and despite the inclusion of models with varying degrees of flexibility – we settled on a reasonably-performing penalized logistic regression model, i.e. elastic net, that did a fair job when applied to our test data. Regardless, the consistency of variable importance in our parametric models, and the fact that they generally performed better than our non-parametric and/or black-box models (with a couple of exceptions, including the neural network) may ostensibly be used by physicians going forward to help identify patients who may be particularly susceptible to CHD in the future. A brief literature review confirms that these variables have been noted as important risk factors for CHD by medical professionals and researchers in the past, which lends additional credibility to our findings.
+
+
+```{r, include=T}
+training_df <- training_df %>% na.omit()
+
+x_train = model.matrix(ten_year_chd ~ ., training_df)[, -1] 
+
+y_train = training_df$ten_year_chd %>% as.numeric()
+
+mod <- glmnet::glmnet(x = x_train, y = y_train, alpha = 0.3, lambda = exp(seq(-8, -3, length = 19)))
+
+plot_glmnet(mod,label = TRUE, s = 0.016)
+```
+
+
+```{r, include=T, fig.width=20, fig.height=10}
+plotnet(nnet_fit_impute$finalModel)
+```
+
+
+
