@@ -226,7 +226,7 @@ corr_plot <- model.matrix(~0 + ., data = cleaned_df) %>%
 missing_data_viz + corr_plot + plot_annotation(title = "Fig. X: Missing Data and Correlation of Predictors")
 ```
 
-
+### Fig.2: Missing Data & Correlation Plot
 ![](Fig.2.jpg){width=110%}
 
 We observe no major multicollinearities in **Figure 2**, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
@@ -1158,17 +1158,14 @@ coef(logit_next$finalModel, logit_next$finalModel$lambdaOpt) %>%
   kable_styling(latex_options = "hold_position")
 ```
 
-```{r, include=T, echo = FALSE}
-training_df <- training_df %>% na.omit()
-
-x_train = model.matrix(ten_year_chd ~ ., training_df)[, -1] 
-
-y_train = training_df$ten_year_chd %>% as.numeric()
-
-mod <- glmnet::glmnet(x = x_train, y = y_train, alpha = 0.3, lambda = exp(seq(-8, -3, length = 19)))
-
-plot_glmnet(mod,label = TRUE, s = 0.016, main = "Fig.7: Trace Plot of Elastic Net Coefficients")
+```{r,include=T, echo = FALSE}
+plot_glmnet(logit_next$finalModel, label = T,
+            s = 0.016, main = "Fig.7: Trace Plot of Elastic Net Coefficients")
 ```
+
+The table and the plot above show the feature selection result of our final model. Among selected predictors, some of their coefficients are close to zero and it appears that systolic blood pressure, age, average number of cigarettes per day, hypertension prevalence, and sex are the important factors in predicting whether one would have chronic heart disease or not. These predictors are also frequently high-ranked in variable importance results of the other models.
+
+\newpage
 
 ## Limitations
 
@@ -1178,6 +1175,77 @@ As noted throughout, class imbalance was a difficulty for model training and per
 
 Overall, our modeling tells us that the most important determinants of heart disease tend to be systolic blood pressure, age, glucose, and sex, which played important roles in most of our models and jibes with our exploratory analysis. That said, other covariates, such as race and income, may ultimately have had stronger explanatory power of CHD status at 10 years had they been included. Although our attempt to find a model with AUC above 0.80 did not prevail – even with upsampling and despite the inclusion of models with varying degrees of flexibility – we settled on a reasonably-performing penalized logistic regression model, i.e. elastic net, that did a fair job when applied to our test data. Regardless, the consistency of variable importance in our parametric models, and the fact that they generally performed better than our non-parametric and/or black-box models (with a couple of exceptions, including the neural network) may ostensibly be used by physicians going forward to help identify patients who may be particularly susceptible to CHD in the future. A brief literature review confirms that these variables have been noted as important risk factors for CHD by medical professionals and researchers in the past, which lends additional credibility to our findings.
 
+\newpage
+
+## Appendix - Extra Stuff   
+
+### Neural Network Model Plot with two Hidden Units
+
 ```{r, include=T, echo = FALSE, fig.width=20, fig.height=10}
-plotnet(nnet_fit_impute$finalModel)
+plotnet(nnet_fit_impute$finalModel, main = "Neural Network Model Plot")
 ```
+
+### MARS Model Partial Dependence Plot with Two Most Frequently Top-Ranked in VIP
+
+```{r, include=T, echo=FALSE, fig.height=4, fig.width=6}
+pdp::partial(mars_fit_impute, pred.var = c( "sys_bp", "age"),
+                   grid.resolution = 10) %>%
+      pdp::plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE,
+                       screen = list(z = 20, x = -60), main)
+```
+
+### All Model Application to Test Data
+
+```{r, include = TRUE, echo = FALSE}
+# ROC curves for fitted models applied to testing data
+# AUC is highest for glmnet and boost_caret_impute (0.74 for both)
+
+roc_rf_recipes_impute = roc(y_test, rf_pred_test_probs)
+roc_boost_impute = roc(y_test, boost_pred_test_probs)
+roc_glmnet = roc(y_test, glmnet_pred_test_probs)
+roc_cart_impute = roc(y_test, cart_pred_prob_test)
+roc_cit_impute = roc(y_test, cit_pred_prob_test)
+roc_svm_linear_impute = roc(y_test, svm_linear_pred_prob_test)
+roc_svm_radial_impute = roc(y_test, svm_radial_pred_prob_test)
+roc_lda = roc(y_test, lda_pred_prob_test)
+roc_nnet_impute <- roc(y_test, nnet_impute_pred_test_probs)
+roc_mars_impute <- roc(y_test, mars_impute_pred_test_probs)
+roc_gam_impute <- roc(y_test, gam_impute_pred_test_probs)
+
+P36 = createPalette(36,  c("#ff0000", "#00ff00", "#0000ff"))
+
+plot(roc_rf_recipes_impute, col = P36[20])
+plot(roc_boost_impute, add = TRUE, col = P36[19])
+plot(roc_glmnet, add = TRUE, col = P36[15])
+plot(roc_cart_impute, add = TRUE, col = P36[22])
+plot(roc_cit_impute, add = TRUE, col = P36[21])
+plot(roc_svm_linear_impute, add = TRUE, col = P36[24])
+plot(roc_svm_radial_impute, add = TRUE, col = P36[23])
+plot(roc_lda, add = TRUE, col = P36[18])
+plot(roc_nnet_impute, add = TRUE, col = P36[16])
+plot(roc_mars_impute, add = TRUE, col = P36[14])
+plot(roc_gam_impute, add = TRUE, col = 17)
+
+auc <- sort(c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], 
+              roc_glmnet$auc[1], roc_cart_impute$auc[1],
+              roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_svm_radial_impute$auc[1],
+              roc_lda$auc[1], roc_nnet_impute$auc[1], roc_mars_impute$auc[1],roc_gam_impute$auc[1]),
+            decreasing = TRUE)
+
+
+model_names = c("MARS", "Elastic Net", "Neural Network","GAM", "LDA", 
+                "Adaboost", "Random Forest", "Conditional Inference Tree", 
+                "Classification Tree","Radial SVM", "Linear SVM")
+
+#model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Caret", 
+#                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Recipes", 
+#                "CIT w/ Recipes", "Linear SVM w/ Caret", "Radial SVM w/ Caret", 
+#                "LDA w/ Caret", "Neural Network Impute", "MARS Impute")
+
+
+#"GAM Impute"
+
+legend("bottomright", legend = paste0(model_names, ": ", round(auc,4)),
+       col = P36[14:24], lwd = 2)
+```
+
