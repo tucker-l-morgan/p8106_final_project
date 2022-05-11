@@ -18,14 +18,13 @@ output:
 ---
 
 ```{r libraries and setup, include = FALSE, echo = FALSE}
-10# TM: are we using all of these? can we remove if not?
 library(tidyverse)
 library(ggplot2)
 library(skimr)
 library(visdat)
 library(reshape2)
 library(DataExplorer)
-library(ggcorrplot) # I prefer this option, we should remove whichever lib we don't use
+library(ggcorrplot)
 library(caret)
 library(vip)
 library(mgcv)
@@ -75,6 +74,8 @@ options(
 scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
+
+\newpage
 
 ## Introduction
 
@@ -172,8 +173,7 @@ missing_data_viz = cleaned_df %>%
   vis_miss()
 ```
 
-Notably, 582 rows (13.7% of our observations) lacked information for at least one feature, with `glucose` accounting for the plurality of missing data (9.15% missing rate). Moving forward, we assume that our data is at least missing at random, and potentially completely at random; in other words, our missingness depends only on the observed data, and consequently it is sensible to construct a KNN imputation step (using five nearest neighbors) into our preprocessing functionality, which also includes centering, scaling, and BoxCox transformations in all possible cases.
-
+Notably, 582 rows (13.7% of our observations) lacked information for at least one feature, with `glucose` accounting for the plurality of missing data (9.15% missing rate), as can be seen in **Figure 2**. Moving forward, we assume that our data is at least missing at random, and potentially completely at random; in other words, our missingness depends only on the observed data, and consequently it is sensible to construct a KNN imputation step (using five nearest neighbors) into our preprocessing functionality, which also includes centering, scaling, and BoxCox transformations in all possible cases.
 
 ```{r continuous variable feature plot, eval = TRUE}
 # Distributions of continuous variables factored by outcome
@@ -216,7 +216,7 @@ categorical_explore = categorical_vars_df %>%
   title = "Fig.1: Distributions of Predictors By Outcome Class"))
 ```
 
-When we stratify the distributions of our continuous predictors by outcome status, we find the most substantial differences in median age, systolic blood pressure, glucose, and daily cigarette consumption for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for stroke history, diabetes status, blood pressure medication status, and hypertension prevalence. 
+When we stratify the distributions of our continuous predictors by outcome status, we find in **Figure 1** the most substantial differences in median age, systolic blood pressure, glucose, and daily cigarette consumption for those with and without CHD at 10 years. Looking at the proportions that have CHD present or absent across levels of our factor variables, there appears to be the most substantial differences for stroke history, diabetes status, blood pressure medication status, and hypertension prevalence. 
 
 ```{r correlation plot, eval = FALSE, echo = TRUE, fig.width=10, fig.height=7}
 corr_plot <- model.matrix(~0 + ., data = cleaned_df) %>%
@@ -229,7 +229,7 @@ missing_data_viz + corr_plot + plot_annotation(title = "Fig. X: Missing Data and
 
 ![](Fig.2.jpg){width=110%}
 
-We observe no major multicollinearities, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
+We observe no major multicollinearities in **Figure 2**, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
 
 Finally, we conducted checks for various parametric model assumptions, including homogeneity of variance and normality of residuals. Overall, we found that though there were no influential outliers in the data and there was lack of significant collinearity, several of these assumptions were not quite met, which we hypothesized would mean that non-parametric methods or regression methods with regularization, such as Lasso, might be more optimal for prediction.
 
@@ -683,7 +683,7 @@ gam_impute_pred_test_probs <- predict(GAM_fit_impute, newdata = testing_df, type
 
 ### Optimal Tuning Parameters
 
-Our tuning parameters were selected via 10-fold cross-validation repeated 5 times using only the training data to maximize validation AUC. We chose AUC as an evaluation measure because it is generally invariant to classification decision boundaries. Our optimal elastic net model had parameters $\alpha$ = 0.3 and $\lambda$ = 0.0164, where $\alpha$ = 0 indicates pure ridge regression and $\alpha$ = 1 indicates pure LASSO regression, so our final model is closer to  ridge. The optimal MARS model had a product degree of 1 and ‘nprune’ of 6. Our optimal random forest model used 1 randomly selected predictor and a minimum node size of 2 observations per node. Our optimal boosted model had a maximum tree depth of 1 with 5,000 boosting iterations and a shrinkage factor of 0.002. The optimal cost parameter for linear SVM was 0.00777. Our optimal radial SVM model had a $\sigma$ value of 0.0498 and a cost parameter of 2.61. The optimal parameters for our neural network model were size 2 and decay of 1.65.
+Our tuning parameters were selected via 10-fold cross-validation repeated 5 times using only the training data to maximize validation AUC; this training process is visualized in **Figure 3**. We chose AUC as an evaluation measure because it is generally invariant to classification decision boundaries. Our optimal elastic net model had parameters $\alpha$ = 0.3 and $\lambda$ = 0.0164, where $\alpha$ = 0 indicates pure ridge regression and $\alpha$ = 1 indicates pure LASSO regression, so our final model is closer to  ridge. The optimal MARS model had a product degree of 1 and ‘nprune’ of 6. Our optimal random forest model used 1 randomly selected predictor and a minimum node size of 2 observations per node. Our optimal boosted model had a maximum tree depth of 1 with 5,000 boosting iterations and a shrinkage factor of 0.002. The optimal cost parameter for linear SVM was 0.00777. Our optimal radial SVM model had a $\sigma$ value of 0.0498 and a cost parameter of 2.61. The optimal parameters for our neural network model were size 2 and decay of 1.65.
 
 ```{r, include = TRUE, echo = FALSE, fig.width=12, fig.height=14}
 # Optimal tuning parameters: GLMNet
@@ -716,8 +716,6 @@ g1 <-
        x = "Regularizaiton parameter")  + labs(color = 'Alpha') +
   theme(plot.subtitle=element_text(size=10, hjust=0.5, face="italic", color="black")) +
   theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-
-
 
 # Optimal tuning parameters RF Recipe: 1 randomly selected predictor, min node size = 10
 # Note: try tuning parameters > 10 min node size in grid?
@@ -772,13 +770,13 @@ g8 <- ggplot(mars_fit_impute, highlight = T) + labs(title = "MARS", y = "AUC") +
 
 # GAM tuning parameter plot looks like an empty plot (professor also doesn't include in her code)
 
-(g1 + g2)/(g3 + g4)/(g5 + g6)/(g7 + g8)
-
+(g1 + g2)/(g3 + g4)/(g5 + g6)/(g7 + g8) +
+  plot_annotation(title = "Fig.3: Tuning Parameter Plots")
 ```
 
 ### Variable Importance
 
-The most important variables in our elastic net model were age, systolic blood pressure, sex, and cigarettes per day. The GAM identified age, glucose, and sex as the most important variables. The most important variables in the MARS model were systolic blood pressure, age, sex, and glucose. For our random forest model, we looked at permutation and impurity methods to assess variable importance. When using the permutation method, we identified systolic blood pressure, diastolic blood pressure, prevalence of hypertension, and glucose as important variables. Similarly, when using the impurity method, we identified systolic blood pressure, age, diastolic blood pressure, and glucose. The most important variables in our boosted model were age, systolic blood pressure, glucose, and cigarettes per day. Our neural network model identified similar important variables in age, glucose, and systolic blood pressure.
+The most important variables in our elastic net model were age, systolic blood pressure, sex, and cigarettes per day. The GAM identified age, glucose, and sex as the most important variables. The most important variables in the MARS model were systolic blood pressure, age, sex, and glucose. For our random forest model, we looked at permutation and impurity methods to assess variable importance. When using the permutation method, we identified systolic blood pressure, diastolic blood pressure, prevalence of hypertension, and glucose as important variables. Similarly, when using the impurity method, we identified systolic blood pressure, age, diastolic blood pressure, and glucose. The most important variables in our boosted model were age, systolic blood pressure, glucose, and cigarettes per day. Our neural network model identified similar important variables in age, glucose, and systolic blood pressure. Some of these results are summarized in **Figure 4**.
 
 Overall, we tended to see the following variables as being important across our analysis: systolic blood pressure, age, glucose, and sex. This is perhaps unsurprising given our exploratory data analysis and relatively better class separability for these features than for others.
 
@@ -915,13 +913,31 @@ g2 <-  ggplot(df, aes(x = reorder(variable, importance), y = importance, fill = 
        ggtitle("Random Forest VIP")
   
     
-plot_grid(g2, g5, g3, g6, ncol = 2)
+vip_grid <- plot_grid(g2, g5, g3, g6, ncol = 2)
+title <- ggdraw() + 
+  draw_label(
+    "Fig.4: Important Variables for Various Models",
+    fontface = 'bold',
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
 
+plot_grid(
+  title, vip_grid,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
 ```
 
 ### Resampling Results and Model Selection
 
-Having trained and fit both more and less flexible models, we then explore the resampling AUC across models and find generally limited stratification between methods with a couple of notable exceptions – namely, significantly lower performance from support vector machines in particular, but also from our tree models (classification tree especially). Although the SVM with a radial kernel did indeed provide significant improvement over the linear SVM as hypothesized, the performance was still far below our other models. This may be in part due to the fact that given the limitations of our machine power, we could only train the radial SVM on a much smaller proportion of our training observations, which leaves room for future exploration. Again, we also note that SVMs cannot quite be compared on AUC given the use of Platt’s probabilities; regardless, we check other metrics, such as accuracy and kappa, and find that these, too, underperform other models – so we would not select SVM models anyway.
+Having trained and fit both more and less flexible models, we then explore the resampling AUC across models (see **Figure 5**) and find generally limited stratification between methods with a couple of notable exceptions – namely, significantly lower performance from support vector machines in particular, but also from our tree models (classification tree especially). Although the SVM with a radial kernel did indeed provide significant improvement over the linear SVM as hypothesized, the performance was still far below our other models. This may be in part due to the fact that given the limitations of our machine power, we could only train the radial SVM on a much smaller proportion of our training observations, which leaves room for future exploration. Again, we also note that SVMs cannot quite be compared on AUC given the use of Platt’s probabilities; regardless, we check other metrics, such as accuracy and kappa, and find that these, too, underperform other models – so we would not select SVM models anyway.
 
 Our top 5 models (elastic net, MARS, neural network, LDA, and GAM) are all extremely close in resampling AUC, falling in the 0.716 to 0.721 range. In general, we prefer to use the simplest, easiest-to-interpret model, which luckily also happens to be our highest performing model on this metric: the elastic net model. Our elastic net model has an AUC of 0.721 and is closer to the ridge model than to LASSO. This AUC means that even our best model is only “okay” or “decent”; its accuracy of just over 85% is also not significantly above the No Information Rate of 84.9%, which means we see only marginal improvement once we take into account the inherent class imbalance found in our data. As noted, upsampling or manual changes to the probability threshold for classification did not ultimately lead to significant improvement, hence its omission here. It’s also worth noting that though none of our models achieves a particularly high sensitivity, the elastic net model also achieves a middle ground in the sensitivity/specificity tradeoff, falling in the middle of the pack compared to other models on both metrics.
 
@@ -1030,7 +1046,7 @@ result2 <-
   stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
                width = 0.75, size = 1, linetype = "solid") + 
   coord_flip() +
-  labs(title = "Fig.5 Distribution of the CV Estimated Sensitivity", 
+  labs(title = "Distribution of the CV Estimated Sensitivity", 
        subtitle = "Middle box line represents mean of sensitivity",
        x = "Model", y = "Sensitivity",
        caption = "") +
@@ -1046,7 +1062,7 @@ result3 <-
   stat_summary(fun.y = mean, geom = "errorbar", aes(ymax = ..y.., ymin = ..y..),
                width = 0.75, size = 1, linetype = "solid") + 
   coord_flip() +
-  labs(title = "Fig.5 Distribution of the CV Estimated Specificity", 
+  labs(title = "Distribution of the CV Estimated Specificity", 
        subtitle = "Middle box line represents mean of specificity",
        x = "Model", y = "Specificity",
        caption = "") +
@@ -1056,10 +1072,11 @@ result3 <-
         legend.position = "none")
 
 
-result1/(result2 +result3)
+result1/(result2 +result3) + 
+  plot_annotation(title = "Fig.5: Cross-Validation Results")
 ```
 
-```{r training result table, include = TRUE, echo = FALSE}
+```{r training result table, include = FALSE, echo = FALSE}
 table_result <-
   result$statistics$ROC[,-7] %>% 
   data.frame() %>%
@@ -1070,7 +1087,7 @@ table_result <-
   kbl(caption = "AUC from 10-fold 5 Repeated CV Estimate") %>%
   kable_classic("striped", full_width = F , html_font = "Cambria",
                 latex_options = "HOLD_position")
-table_result
+# table_result
 ```
 
 ### Model Application to Test Data
@@ -1093,46 +1110,65 @@ roc_gam_impute <- roc(y_test, gam_impute_pred_test_probs)
 
 P36 = createPalette(36,  c("#ff0000", "#00ff00", "#0000ff"))
 
-plot(roc_rf_recipes_impute, col = P36[20])
-plot(roc_boost_impute, add = TRUE, col = P36[19])
-plot(roc_glmnet, add = TRUE, col = P36[15])
-plot(roc_cart_impute, add = TRUE, col = P36[22])
-plot(roc_cit_impute, add = TRUE, col = P36[21])
-plot(roc_svm_linear_impute, add = TRUE, col = P36[24])
-plot(roc_svm_radial_impute, add = TRUE, col = P36[23])
-plot(roc_lda, add = TRUE, col = P36[18])
-plot(roc_nnet_impute, add = TRUE, col = P36[16])
-plot(roc_mars_impute, add = TRUE, col = P36[14])
-plot(roc_gam_impute, add = TRUE, col = 17)
+plot(roc_glmnet, col = P36[1], print.auc = TRUE, legacy.axes = TRUE)
+title(main = "Fig.6: ROC Curves for Prediction of Test Data", line = 3)
+# plot(roc_rf_recipes_impute, add = TRUE, col = P36[32])
+# plot(roc_boost_impute, add = TRUE, col = P36[32])
+# plot(roc_cart_impute, add = TRUE, col = P36[32])
+# plot(roc_cit_impute, add = TRUE, col = P36[32])
+# plot(roc_svm_linear_impute, add = TRUE, col = P36[32])
+# plot(roc_svm_radial_impute, add = TRUE, col = P36[32])
+# plot(roc_lda, add = TRUE, col = P36[32])
+# plot(roc_nnet_impute, add = TRUE, col = P36[32])
+# plot(roc_mars_impute, add = TRUE, col = P36[32])
+# plot(roc_gam_impute, add = TRUE, col = P36[32])
 
-auc <- sort(c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], 
-              roc_glmnet$auc[1], roc_cart_impute$auc[1],
-              roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1], roc_svm_radial_impute$auc[1],
-              roc_lda$auc[1], roc_nnet_impute$auc[1], roc_mars_impute$auc[1],roc_gam_impute$auc[1]),
-            decreasing = TRUE)
+# auc <- sort(c(roc_rf_recipes_impute$auc[1], roc_boost_impute$auc[1], 
+#               roc_glmnet$auc[1], roc_cart_impute$auc[1],
+#               roc_cit_impute$auc[1], roc_svm_linear_impute$auc[1],
+#               roc_svm_radial_impute$auc[1],
+#               roc_lda$auc[1], roc_nnet_impute$auc[1], # roc_mars_impute$auc[1],roc_gam_impute$auc[1]),
+#             decreasing = TRUE)
+# 
+# 
+# model_names = c("MARS", "Elastic Net", "Neural Network","GAM", "LDA", 
+#                 "Adaboost", "Random Forest", "Conditional Inference Tree", 
+#                 "Classification Tree","Radial SVM", "Linear SVM")
 
-
-model_names = c("MARS", "Elastic Net", "Neural Network","GAM", "LDA", 
-                "Adaboost", "Random Forest", "Conditional Inference Tree", 
-                "Classification Tree","Radial SVM", "Linear SVM")
-
-#model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Caret", 
-#                "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Recipes", 
-#                "CIT w/ Recipes", "Linear SVM w/ Caret", "Radial SVM w/ Caret", 
-#                "LDA w/ Caret", "Neural Network Impute", "MARS Impute")
+# model_names = c("Random Forest w/ Recipes", "Adaboost w/ Recipes", "GLMNet w/ Caret", 
+#                 "Random Forest w/ Caret", "Boost w/ Caret", "CART w/ Recipes", 
+#                 "CIT w/ Recipes", "Linear SVM w/ Caret", "Radial SVM w/ Caret", 
+#                 "LDA w/ Caret", "Neural Network Impute", "MARS Impute")
 
 
 #"GAM Impute"
 
-legend("bottomright", legend = paste0(model_names, ": ", round(auc,4)),
-       col = P36[14:24], lwd = 2)
+# legend("bottomright", legend = paste0("Elastic Net", ": ", round(roc_glmnet$auc[1],4)),
+#        col = P36[1], lwd = 2)
 ```
 
-In the ROC plot above, we see the area-under-curve of our selected model applied to our test data with a value of 0.7403, indicating middling classification performance. Despite our efforts with data imputation, it looks like our model still suffers due to class imbalance.
+In **Figure 6**, we see the area-under-curve of our selected model applied to our test data with a value of 0.7403, indicating middling classification performance. Despite our efforts with data imputation, it looks like our model still suffers due to class imbalance. The selected model coefficients can be seen in **Table 2**, and changes over the penalty tuning parameter can be seen in **Figure 7**. The predicted outcome for this model is CHD negative, so we can see that: female subjects are less likely to be CHD present than male subjects; as the number of cigarettes per day increases we expect the probability of CHD present to increase; the prevalence of hypertension contributes to increased odds of CHD in 10 years of follow up; and an increase in systolic blood pressure is expected to increase the probability of CHD present.
 
-### Explanation of Final Model
+```{r glmnet coef table, echo = FALSE, include = TRUE}
+coef(logit_next$finalModel, logit_next$finalModel$lambdaOpt) %>% 
+  as.matrix() %>% 
+  data.frame() %>% 
+  filter(s1 != 0) %>% 
+  knitr::kable(caption = "Elastic Net Coefficients") %>% 
+  kable_styling(latex_options = "hold_position")
+```
 
-TO DO
+```{r, include=T, echo = FALSE}
+training_df <- training_df %>% na.omit()
+
+x_train = model.matrix(ten_year_chd ~ ., training_df)[, -1] 
+
+y_train = training_df$ten_year_chd %>% as.numeric()
+
+mod <- glmnet::glmnet(x = x_train, y = y_train, alpha = 0.3, lambda = exp(seq(-8, -3, length = 19)))
+
+plot_glmnet(mod,label = TRUE, s = 0.016, main = "Fig.7: Trace Plot of Elastic Net Coefficients")
+```
 
 ## Limitations
 
@@ -1142,23 +1178,6 @@ As noted throughout, class imbalance was a difficulty for model training and per
 
 Overall, our modeling tells us that the most important determinants of heart disease tend to be systolic blood pressure, age, glucose, and sex, which played important roles in most of our models and jibes with our exploratory analysis. That said, other covariates, such as race and income, may ultimately have had stronger explanatory power of CHD status at 10 years had they been included. Although our attempt to find a model with AUC above 0.80 did not prevail – even with upsampling and despite the inclusion of models with varying degrees of flexibility – we settled on a reasonably-performing penalized logistic regression model, i.e. elastic net, that did a fair job when applied to our test data. Regardless, the consistency of variable importance in our parametric models, and the fact that they generally performed better than our non-parametric and/or black-box models (with a couple of exceptions, including the neural network) may ostensibly be used by physicians going forward to help identify patients who may be particularly susceptible to CHD in the future. A brief literature review confirms that these variables have been noted as important risk factors for CHD by medical professionals and researchers in the past, which lends additional credibility to our findings.
 
-
-```{r, include=T}
-training_df <- training_df %>% na.omit()
-
-x_train = model.matrix(ten_year_chd ~ ., training_df)[, -1] 
-
-y_train = training_df$ten_year_chd %>% as.numeric()
-
-mod <- glmnet::glmnet(x = x_train, y = y_train, alpha = 0.3, lambda = exp(seq(-8, -3, length = 19)))
-
-plot_glmnet(mod,label = TRUE, s = 0.016)
-```
-
-
-```{r, include=T, fig.width=20, fig.height=10}
+```{r, include=T, echo = FALSE, fig.width=20, fig.height=10}
 plotnet(nnet_fit_impute$finalModel)
 ```
-
-
-
