@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999993 (TeX Live 2021) (preloaded format=xelatex 2022.3.18)  11 MAY 2022 15:32
+This is XeTeX, Version 3.141592653-2.6-0.999993 (TeX Live 2021) (preloaded format=xelatex 2022.3.18)  11 MAY 2022 16:40
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -818,15 +818,15 @@ LaTeX Font Info:    Font shape `TU/latinmodern-math.otf(3)/m/n' will be
 ]
 File: p8106_final_project_files/figure-latex/combined eda figure-1.pdf Graphic file (type pdf)
 <use p8106_final_project_files/figure-latex/combined eda figure-1.pdf>
-[2]
+[2] [3]
 File: Fig.2.jpg Graphic file (type bmp)
 <Fig.2.jpg>
 
-Overfull \hbox (46.98128pt too wide) in paragraph at lines 212--213
-[] 
+Overfull \hbox (46.98128pt too wide) in paragraph at lines 214--215
+[][] 
  []
 
-[3] [4] [5]
+[4] [5]
 File: p8106_final_project_files/figure-latex/unnamed-chunk-5-1.pdf Graphic file (type pdf)
 <use p8106_final_project_files/figure-latex/unnamed-chunk-5-1.pdf>
 [6] [7]
@@ -852,15 +852,15 @@ File: p8106_final_project_files/figure-latex/unnamed-chunk-12-1.pdf Graphic file
 <use p8106_final_project_files/figure-latex/unnamed-chunk-12-1.pdf>
 [13] [14] (./p8106_final_project.aux)
 Package rerunfilecheck Info: File `p8106_final_project.out' has not changed.
-(rerunfilecheck)             Checksum: FA3AA58907EF4EFADE61BD331E77914A;2969.
+(rerunfilecheck)             Checksum: 8E53E3AA73142AF3E41125012449640E;722.
  ) 
 Here is how much of TeX's memory you used:
- 18089 strings out of 478179
- 336708 string characters out of 5853380
- 789129 words of memory out of 5000000
- 38429 multiletter control sequences out of 15000+600000
+ 18085 strings out of 478179
+ 336634 string characters out of 5853380
+ 788067 words of memory out of 5000000
+ 38425 multiletter control sequences out of 15000+600000
  475800 words of font info for 80 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 86i,9n,121p,531b,390s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 86i,9n,121p,313b,390s stack positions out of 5000i,500n,10000p,200000b,80000s
 
 Output written on p8106_final_project.pdf (14 pages).

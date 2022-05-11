@@ -6,7 +6,7 @@ output:
   pdf_document:
     latex_engine: xelatex
     toc: yes
-    toc_depth: 3
+    toc_depth: 2
   fontsize: 10pt
   geometry: margin=0.5in
   header-includes:
@@ -226,8 +226,14 @@ corr_plot <- model.matrix(~0 + ., data = cleaned_df) %>%
 missing_data_viz + corr_plot + plot_annotation(title = "Fig. X: Missing Data and Correlation of Predictors")
 ```
 
-### Fig.2: Missing Data & Correlation Plot
+\newpage    
+
+\begin{center}
+ Fig.2: Missing Data and Correlation Plot
+\end{center}
+
 ![](Fig.2.jpg){width=110%}
+
 
 We observe no major multicollinearities in **Figure 2**, with the highest correlations (all sub-0.80) found between systolic and diastolic blood pressure, cigarette smoking and cigarettes smoked per day, prevalent hypertension and blood pressure, and glucose levels and diabetes comorbidity. In addition, CHD status is most correlated with age, systolic blood pressure, and prevalence of hypertension, which is unsurprising given our prior exploratory visualizations stratified by CHD class.
 
