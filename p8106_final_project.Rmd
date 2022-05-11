@@ -1130,6 +1130,10 @@ legend("bottomright", legend = paste0(model_names, ": ", round(auc,4)),
 
 In the ROC plot above, we see the area-under-curve of our selected model applied to our test data with a value of 0.7403, indicating middling classification performance. Despite our efforts with data imputation, it looks like our model still suffers due to class imbalance.
 
+### Explanation of Final Model
+
+TO DO
+
 ## Limitations
 
 As noted throughout, class imbalance was a difficulty for model training and performance. Despite our best efforts at upsampling the less common class (CHD presence), we could not significantly improve model performance. We would have preferred to have at least 1000 observations in each class. Another limitation here is that we used the `recipes` implementation of KNN imputation, for the most part, since this works for both categorical and continuous variables, and can easily work within `caret` model training during repeated cross-validation. However, our future work might explore whether bagged imputation might be more effective, given that our predictor with highest missingness (glucose) has one clear correlate that is essentially complete and has a clear correlational mechanism (diabetes). In addition, interaction terms are excluded from this analysis, although there may very well be some effect measure modification at play. As mentioned, if we had more computational power, we would try the radial SVM without having to train a model only on a smaller number of training observations than our machines would allow – although we’d still face the same issues in making comparisons AUC given the use of Platt’s probabilities. We note as well the many violations found for parametric model assumptions, which may inherently limit the utility of models like elastic net. Our AUC may also improve with the inclusion of more and other types of predictors, such as race, that are missing from our data set, but were certainly recorded during the original Framingham Heart Study.  Such features may be more closely related to and more highly predictive of our 10-year CHD follow-up outcome. 
